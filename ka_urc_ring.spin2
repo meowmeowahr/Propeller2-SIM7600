@@ -1,0 +1,195 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... ka_urc_ring.spin2
+''   Purpose.... Ring buffer for AT Modem URC Queue
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 04 JUN 2026
+''   Updated.... 04 JUN 2026
+''
+'' =================================================================================================
+
+OBJ
+    cf          : "ka_modem_settings"
+
+VAR
+    BYTE    urc_queue[cf.BUF_SIZE]                                  ' unsolicited response buffer/queue
+    LONG    urc_starts[cf.MAX_FRAMES]                               ' urc indices in fifo
+
+    LONG    buf_tail                                                ' next free byte position for urc
+    LONG    starts_head                                             ' index read pointer
+    LONG    starts_tail                                             ' index write pointer
+    LONG    urc_count                                               ' number of complete urcs in queue
+
+    LONG    wip_start                                               ' byte-ring offset where current partial frame began
+    LONG    wip_len                                                 ' bytes written so far into current partial frame
+    LONG    wip_active                                              ' non-zero while a partial frame is open
+
+PUB urcQueueInit()
+
+    buf_tail   := 0
+    starts_head   := 0
+    starts_tail   := 0
+    urc_count  := 0
+    wip_start  := 0
+    wip_len    := 0
+    wip_active := 0
+
+
+PUB urcQueuePut(c)
+
+    if not wip_active
+        wip_start  := buf_tail
+        wip_len    := 0
+        wip_active := 1
+        debug("frame_putc: new frame started at buf[", udec_(wip_start), "]")
+
+    repeat while urcQueueMemFree() == 0
+        ' the queue is full
+        urcQueueDrop()
+
+    urc_queue[buf_tail] := c
+    buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
+    wip_len++
+
+
+PUB urcQueueCommit() : ok
+
+    if not wip_active
+        ok := 0
+        ' there is nothing to commit
+        return
+
+    repeat while urcQueueMemFree() == 0
+        ' the queue is full, must make room for null terminator
+        urcQueueDrop()
+
+    urc_queue[buf_tail] := 0                            ' null terminator
+    buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
+
+    ' drop oldest urc is the ring is full
+    if urc_count >= cf.MAX_FRAMES
+        debug("frame_commit: urc ring full — dropping oldest frame entry")
+        urcQueueDrop()
+
+    ' Register frame start in index ring
+    urc_starts[starts_tail] := wip_start
+    starts_tail  := (starts_tail + 1) & (cf.MAX_FRAMES - 1)
+    urc_count++
+
+    debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(urc_count))
+
+    wip_active := 0
+    wip_len    := 0
+    ok := 1
+
+
+PUB urcQueueWriteStr(pStr) | c
+
+    debug("frame_write: enqueueing string")
+    repeat
+        c := BYTE[pStr++]
+        if c == 0
+            quit
+        urcQueuePut(c)
+
+    urcQueueCommit()
+
+
+PUB urcQueueReadStr(pDst, maxLen) : n
+
+    n := urcQueuePeekStr(pDst, maxLen)
+
+    ' advance head
+    starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
+    urc_count--
+
+
+PUB urcQueuePeekStr(pDst, maxLen) : n | src, c
+
+    if urc_count == 0
+        ' ring is empty
+        n := -1
+        return
+
+    src := urc_starts[starts_head]
+    n   := 0
+
+    repeat
+        c := urc_queue[src]
+        src := (src + 1) & (cf.BUF_SIZE - 1)
+        if n < maxLen - 1
+            BYTE[pDst][n] := c
+        n++
+        if c == 0
+            quit
+
+    BYTE[pDst][n <# maxLen - 1] := 0                    ' null termination
+    n--                                                 ' char count w/o null term
+
+
+PUB urcQueueCount() : n
+    n := urc_count
+
+
+PUB urcQueueIsEmpty() : e
+    e := (urc_count == 0)
+
+
+PUB urcQueueIsFull() : f
+    f := (urc_count >= cf.MAX_FRAMES)
+
+
+PRI urcQueueMemFree() : FREE | oldest_start
+
+    if urc_count == 0 AND not wip_active
+        FREE := cf.BUF_SIZE                             ' ring is empty
+        return
+
+    ' oldest live byte is either the oldest complete frame or the start of the current partial frame
+    if urc_count > 0
+        oldest_start := urc_starts[starts_head]
+    else
+        oldest_start := wip_start
+
+    ' distance from tail to oldest_start
+    FREE := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
+
+
+PRI urcQueueDrop()
+
+    if urc_count == 0
+        ' nothing to drop
+        return
+
+    starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
+    urc_count--
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

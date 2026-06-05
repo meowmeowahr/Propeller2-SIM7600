@@ -1,0 +1,45 @@
+'' =========================================================================
+'' SIM7600 basic AT + version info helpers
+'' Spin2 v53
+'' =========================================================================
+
+CON
+    CLKFREQ_  = 200_000_000
+
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+OBJ
+
+    modem         : "ka_sim7600"
+
+PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only needs 16
+    modem.start(RX, TX, DTR, RST, 115_200, 0)
+
+    ' Wait until modem is ready
+    repeat
+        debug("Modem starting...")
+        if modem.checkReady(1000)
+            debug("Modem ready")
+            quit
+
+    status := modem.getModemFirmwareRevision(@buf, 128, 2000)
+    debug("getModemFirmwareRevision ", sdec(status), zstr(@buf))
+
+    status := modem.getModemModel(@buf, 128, 2000)
+    debug("getModemModel ", sdec(status), zstr(@buf))
+
+    status := modem.getModemManufacturer(@buf, 128, 2000)
+    debug("getModemManufacturer ", sdec(status), zstr(@buf))
+
+    status := modem.getModemSerialNumber(@buf, 128, 2000)
+    debug("getModemSerialNumber ", sdec(status), zstr(@buf))
+
+    status := modem.getSupportedBaudRates(@bauds, 24, 2000)
+    debug("getSupportedBaudRates count ", sdec(status), udec_long_array(@bauds, status))
+
+    longfill(@bauds, 0, 24)
+    status := modem.getSupportedTemporaryBaudRates(@bauds, 24, 2000)
+    debug("getSupportedTemporaryBaudRates count ", sdec(status), udec_long_array(@bauds, status))

@@ -1,0 +1,338 @@
+CON
+    LF  = 10
+    CR  = 13
+
+CON
+
+    #0, MODE_MINIMUM, MODE_FULL
+    #4, MODE_FLIGHT, MODE_FACTORY_TEST, MODE_RESET, MODE_OFFLINE
+
+OBJ
+    ser         : "jm_fullduplexserial"
+    nstr        : "jm_nstr"
+    str         : "string"
+
+    ring        : "ka_urc_ring"
+
+VAR
+    BYTE    dtrP, rstP
+    BYTE    lineBuf[128]
+    LONG    lineIdx
+
+    BYTE    modemReady
+    BYTE    doResetFlag
+
+PUB null()
+
+
+PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset) | buf[16]
+
+    ser.start(rxPin, txPin, %0000, baud)
+    dtrP := dtrPin
+    rstP := rstPin
+
+    ring.urcQueueInit()
+
+    modemReady  := 0
+    doResetFlag := doReset
+    lineIdx     := 0
+
+    if doResetFlag
+        resetModem()
+    else
+        modemReady := checkReady(1000)
+
+PUB stop()
+
+    ser.stop()
+    modemReady := 0
+    doResetFlag := 0
+    bytefill(@lineBuf, 0, 128)
+
+PUB modemIsReady() : r
+    r := modemReady
+
+
+PUB resetModem()
+
+    pinh(rstP)
+    waitms(200)
+    pinl(rstP)
+
+'' Non-blocking readiness check: look for the "RDY" line
+PUB checkReady(timeoutMs) : r | c, buf[8], status
+
+    if modemReady
+        return 1
+
+    status := sendCommandAndGetPayload(string("AT"), @buf, 8, timeoutMs)
+    debug(zstr(@buf), sdec(status))
+    if status == 1
+        r := 1
+        return
+
+    r := modemReady
+
+PRI sendCommand(pCmdStr) : ok
+
+    ser.str(pCmdStr)
+    ser.tx(CR)
+    ok := 1
+
+
+PRI sendCommandAndGetPayload(pCmdStr, pBuf, maxLen, timeoutMs) : status | startMs, now, c, curLen, sawEcho
+' Clear output buffer
+
+    if maxLen > 0
+        BYTE[pBuf][0] := 0
+
+    if not sendCommand(pCmdStr)
+        return -1
+
+    lineIdx := 0
+    curLen  := 0
+    sawEcho := 0
+    startMs := getms()
+    status  := -1
+
+    repeat
+        now := getms()
+        if (now - startMs) > timeoutMs
+            status := -1
+            return
+
+        c := ser.rxcheck()
+        if c == -1
+            next
+
+        if (c == CR) or (c == LF)
+            debug("Received line: ", zstr(@lineBuf))
+            if lineIdx > 0
+                lineBuf[lineIdx] := 0
+
+                ' Final result codes
+                if strcomp(@lineBuf, string("OK"))
+                    status := 1
+                    return
+                elseif strcomp(@lineBuf, string("ERROR"))
+                    status := 0
+                    return
+
+                ' Ignore everything until we see the exact echo
+                if not sawEcho
+                    if strcomp(@lineBuf, pCmdStr)
+                        sawEcho := 1
+                    lineIdx := 0
+                    next
+
+                ' After echo: treat every line as payload
+                curLen := appendLineToBuf(pBuf, maxLen, @lineBuf, curLen)
+                lineIdx := 0
+        else
+            if lineIdx < (128 - 1)
+                lineBuf[lineIdx++] := c
+            else
+                lineIdx := 0
+
+
+PRI appendLineToBuf(pBuf, maxLen, pLine, curLen) : newLen | lineLen, copyLen
+
+    lineLen := strsize(pLine)
+
+    ' Need space for line + '\n' + 0 terminator
+    if (curLen + lineLen + 2) >= maxLen
+        return curLen
+
+    copyLen := lineLen
+    bytemove(pBuf + curLen, pLine, copyLen)
+    curLen += copyLen
+
+    ' Add newline separator
+    BYTE[pBuf][curLen++] := 10
+    BYTE[pBuf][curLen]   := 0
+
+    newLen := curLen
+
+
+PUB getModemFirmwareRevision(pBuf, maxLen, timeoutMs) : status | tmp[128], src, dst, i
+
+    status := sendCommandAndGetPayload(string("AT+CGMR"), @tmp, 128, timeoutMs)
+    if status <> 1
+        if maxLen > 0
+            BYTE[pBuf][0] := 0
+        return
+
+    ' tmp may contain one or more lines; we'll use the first
+    src := @tmp
+    dst := pBuf
+
+    ' If line starts with "+CGMR:", skip that and any following spaces
+    if strcomp(src, string("+CGMR:"))
+        src += strsize(string("+CGMR:"))
+        repeat while (BYTE[src] == " ")
+            src++
+
+    i := 0
+    repeat while (BYTE[src] <> 10) and (BYTE[src] <> 0) and (i < (maxLen-1))
+        BYTE[dst][i++] := BYTE[src++]
+    BYTE[dst][i] := 0
+
+
+PUB getModemModel(pBuf, maxLen, timeoutMs) : status | tmp[128], src, dst, i
+
+    status := sendCommandAndGetPayload(string("AT+CGMM"), @tmp, 128, timeoutMs)
+    if status <> 1
+        if maxLen > 0
+            BYTE[pBuf][0] := 0
+        return
+
+    src := @tmp
+    dst := pBuf
+    i := 0
+    repeat while (BYTE[src] <> 10) and (BYTE[src] <> 0) and (i < (maxLen-1))
+        BYTE[dst][i++] := BYTE[src++]
+    BYTE[dst][i] := 0
+
+
+PUB getModemManufacturer(pBuf, maxLen, timeoutMs) : status | tmp[128], src, dst, i
+
+    status := sendCommandAndGetPayload(string("AT+CGMI"), @tmp, 128, timeoutMs)
+    if status <> 1
+        if maxLen > 0
+            BYTE[pBuf][0] := 0
+        return
+
+    src := @tmp
+    dst := pBuf
+    i := 0
+    repeat while (BYTE[src] <> 10) and (BYTE[src] <> 0) and (i < (maxLen-1))
+        BYTE[dst][i++] := BYTE[src++]
+    BYTE[dst][i] := 0
+
+
+PUB getModemSerialNumber(pBuf, maxLen, timeoutMs) : status | tmp[128], src, dst, i
+
+    status := sendCommandAndGetPayload(string("AT+CGSN"), @tmp, 128, timeoutMs)
+    if status <> 1
+        if maxLen > 0
+            BYTE[pBuf][0] := 0
+        return
+
+    src := @tmp
+    dst := pBuf
+    i := 0
+    repeat while (BYTE[src] <> 10) and (BYTE[src] <> 0) and (i < (maxLen-1))
+        BYTE[dst][i++] := BYTE[src++]
+    BYTE[dst][i] := 0
+
+
+PUB getModemIMEI(pBuf, maxLen, timeoutMs) : status
+
+    status := getModemSerialNumber(pBuf, maxLen, timeoutMs)
+
+
+PUB setModemMode(mode, timeoutMs) : status | tmp[16]
+    str.sprintf1(@tmp, @"AT+CFUN=%d", mode)
+    status := sendCommandAndGetPayload(@tmp, @lineBuf, 128, timeoutMs)
+
+
+PUB getModemMode() : mode | tmp[128]
+
+    if sendCommandAndGetPayload(string("AT+CFUN?"), @tmp, 128, 2000) <> 1
+        mode := -1
+        return
+
+    ' Response should be like "+CFUN: <mode>"
+    if not strcomp(tmp, string("+CFUN:"))
+        mode := -1
+        return
+
+    mode := str.atoi(@tmp + strsize(string("+CFUN:")))
+
+PUB getSupportedBaudRates(pBuf, maxLen, timeoutMs) : count | tmp[128], src, val, pOut, i
+
+    count := -1
+
+    if sendCommandAndGetPayload(string("AT+IPREX=?"), @tmp, 128, timeoutMs) <> 1
+        return
+
+    src := @tmp
+
+    if (byte[src] == "+")
+        src += strsize(string("+IPREX:"))
+
+    repeat while (byte[src] == " ")
+        src++
+
+    if byte[src] == "("
+        src++
+
+    pOut := pBuf
+    i := 0
+
+    repeat while (byte[src] <> 0) and (byte[src] <> 10) and (byte[src] <> ")") and (i < maxLen)
+        repeat while (byte[src] == ",")
+            src++
+        if byte[src] == ")"
+            quit
+
+        val := str.atoi(src)
+
+        repeat while (byte[src] >= "0") and (byte[src] <= "9")
+            src++
+
+        long[pOut][0] := val
+        pOut += 4
+        i++
+
+    count := i
+
+
+PUB getSupportedTemporaryBaudRates(pBuf, maxLen, timeoutMs) : count | tmp[128], src, val, pOut, i
+
+    count := -1
+
+    if sendCommandAndGetPayload(string("AT+IPR=?"), @tmp, 128, timeoutMs) <> 1
+        return
+
+    src := @tmp
+
+    if (byte[src] == "+")
+        src += strsize(string("+IPR:"))
+
+    repeat while (byte[src] == " ")
+        src++
+
+    if byte[src] == "("
+        src++
+
+    pOut := pBuf
+    i := 0
+
+    repeat while (byte[src] <> 0) and (byte[src] <> 10) and (byte[src] <> ")") and (i < maxLen)
+        repeat while (byte[src] == ",")
+            src++
+        if byte[src] == ")"
+            quit
+
+        val := str.atoi(src)
+
+        repeat while (byte[src] >= "0") and (byte[src] <= "9")
+            src++
+
+        long[pOut][0] := val
+        pOut += 4
+        i++
+
+    count := i
+
+
+PUB setTemporaryBaudRate(baud, timeoutMs) : status | tmp[24]
+
+    str.sprintf1(@tmp, @"AT+IPR=%d", baud)
+    status := sendCommandAndGetPayload(@tmp, @lineBuf, 128, timeoutMs)
+
+PUB setPersistentBaudRate(baud, timeoutMs) : status | tmp[24]
+
+    str.sprintf1(@tmp, @"AT+IPREX=%d", baud)
+    status := sendCommandAndGetPayload(@tmp, @lineBuf, 128, timeoutMs)

@@ -1,0 +1,49 @@
+CON
+    CLKFREQ_  = 200_000_000
+
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+CON
+
+    OLD_BAUD = 115200
+    NEW_BAUD = 921600
+
+OBJ
+
+    modem       : "ka_sim7600"
+
+PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only needs 16
+    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1) ' force device reset
+
+    ' Wait until modem is ready
+    repeat
+        debug("Modem starting...")
+        if modem.checkReady(1000)
+            debug("Modem ready")
+            quit
+
+    status := modem.getModemModel(@buf, 128, 2000)
+    debug("getModemModel before changing baud", udec(status), zstr(@buf))
+
+    status := modem.setTemporaryBaudRate(NEW_BAUD, 2000)
+    debug("setTemporaryBaudRate status ", udec(status))
+
+    status := modem.getModemModel(@buf, 128, 2000)
+    debug("getModemModel before changing baud", udec(status), zstr(@buf))
+    
+    modem.stop()
+    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1) ' force device reset to apply
+
+    ' Wait until modem is ready
+    repeat
+        debug("Modem starting...")
+        if modem.checkReady(1000)
+            debug("Modem ready")
+            quit
+        waitms(1000)
+
+    status := modem.getModemModel(@buf, 128, 2000)
+    debug("getModemModel after changing baud", udec(status), zstr(@buf))
