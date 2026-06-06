@@ -1,0 +1,266 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... ka_modem_utils.spin2
+''   Purpose.... Utility methods for SIMCOM SIM7600 4G/3G/2G Cellular Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 05 JUN 2026
+''   Updated.... 05 JUN 2026
+''
+'' =================================================================================================
+
+DAT
+
+    rssi_map
+
+    ' 0–31 GSM/LTE RSSI
+                BYTE    -113
+                BYTE    -111
+                BYTE    -109
+                BYTE    -107
+                BYTE    -105
+                BYTE    -103
+                BYTE    -101
+                BYTE    -99
+                BYTE    -97
+                BYTE    -95
+                BYTE    -93
+                BYTE    -91
+                BYTE    -89
+                BYTE    -87
+                BYTE    -85
+                BYTE    -83
+                BYTE    -81
+                BYTE    -79
+                BYTE    -77
+                BYTE    -75
+                BYTE    -73
+                BYTE    -71
+                BYTE    -69
+                BYTE    -67
+                BYTE    -65
+                BYTE    -63
+                BYTE    -61
+                BYTE    -59
+                BYTE    -57
+                BYTE    -55
+                BYTE    -53
+                BYTE    -51                                         ' 31
+
+    ' 32–98 invalid / unused
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+
+    ' 99 unknown
+                BYTE    -128
+
+    ' 100–191 WCDMA / TDSCDMA RSCP
+                BYTE    -116
+                BYTE    -115
+                BYTE    -114
+                BYTE    -113
+                BYTE    -112
+                BYTE    -111
+                BYTE    -110
+                BYTE    -109
+                BYTE    -108
+                BYTE    -107
+                BYTE    -106
+                BYTE    -105
+                BYTE    -104
+                BYTE    -103
+                BYTE    -102
+                BYTE    -101
+                BYTE    -100
+                BYTE    -99
+                BYTE    -98
+                BYTE    -97
+                BYTE    -96
+                BYTE    -95
+                BYTE    -94
+                BYTE    -93
+                BYTE    -92
+                BYTE    -91
+                BYTE    -90
+                BYTE    -89
+                BYTE    -88
+                BYTE    -87
+                BYTE    -86
+                BYTE    -85
+                BYTE    -84
+                BYTE    -83
+                BYTE    -82
+                BYTE    -81
+                BYTE    -80
+                BYTE    -79
+                BYTE    -78
+                BYTE    -77
+                BYTE    -76
+                BYTE    -75
+                BYTE    -74
+                BYTE    -73
+                BYTE    -72
+                BYTE    -71
+                BYTE    -70
+                BYTE    -69
+                BYTE    -68
+                BYTE    -67
+                BYTE    -66
+                BYTE    -65
+                BYTE    -64
+                BYTE    -63
+                BYTE    -62
+                BYTE    -61
+                BYTE    -60
+                BYTE    -59
+                BYTE    -58
+                BYTE    -57
+                BYTE    -56
+                BYTE    -55
+                BYTE    -54
+                BYTE    -53
+                BYTE    -52
+                BYTE    -51
+                BYTE    -50
+                BYTE    -49
+                BYTE    -48
+                BYTE    -47
+                BYTE    -46
+                BYTE    -45
+                BYTE    -44
+                BYTE    -43
+                BYTE    -42
+                BYTE    -41
+                BYTE    -40
+                BYTE    -39
+                BYTE    -38
+                BYTE    -37
+                BYTE    -36
+                BYTE    -35
+                BYTE    -34
+                BYTE    -33
+                BYTE    -32
+                BYTE    -31
+                BYTE    -30
+                BYTE    -29
+                BYTE    -28
+                BYTE    -27
+                BYTE    -26
+                BYTE    -25
+
+    ' 192–198 invalid
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+                BYTE    -128
+
+    ' 199 unknown
+                BYTE    -128
+
+PUB rssiValueToDbm(n) : BYTE dbm
+
+    if n > 199
+        return -128
+
+    dbm := BYTE[@rssi_map+n]
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

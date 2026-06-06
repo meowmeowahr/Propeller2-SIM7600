@@ -1,3 +1,17 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 02_baud_rate_persist.spin2
+''   Purpose.... Set persistent baud rate to SIM7600 Modem Flash Storage
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 04 JUN 2026
+''   Updated.... 05 JUN 2026
+''
+'' =================================================================================================
+
 CON
     CLKFREQ_  = 200_000_000
 
@@ -8,42 +22,71 @@ CON
 
 CON
 
-    OLD_BAUD = 115200
-    NEW_BAUD = 921600
+    {{
+        SIM7600 Supported Baud Rates
+        0, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115_200, 230_400, 460_800, 921_600, 3_000_000, 3_200_000, 3_686_400
+    }}
+
+    OLD_BAUD = 115200 ' old baud rate, default for SIM7600 is 115200
+    NEW_BAUD = 921600 ' new baud rate to apply to non-volatile storage
 
 OBJ
 
     modem       : "ka_sim7600"
 
-PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only needs 16
+PUB main() | status, buf[128]
     modem.start(RX, TX, DTR, RST, OLD_BAUD, 1) ' force device reset
 
     ' Wait until modem is ready
     repeat
+        waitms(1000)
         debug("Modem starting...")
-        if modem.checkReady(1000)
+        if modem.isReady()
             debug("Modem ready")
             quit
 
-    status := modem.getModemModel(@buf, 128, 2000)
+    status := modem.getModemModel(@buf, 128)
     debug("getModemModel before changing baud", udec(status), zstr(@buf))
 
-    status := modem.setTemporaryBaudRate(NEW_BAUD, 2000)
-    debug("setTemporaryBaudRate status ", udec(status))
+    status := modem.setPermanentBaudRate(NEW_BAUD)
+    debug("setPermanentBaudRate status ", udec(status))
 
-    status := modem.getModemModel(@buf, 128, 2000)
-    debug("getModemModel before changing baud", udec(status), zstr(@buf))
-    
     modem.stop()
-    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1) ' force device reset to apply
+    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1) ' must reboot to apply
 
     ' Wait until modem is ready
     repeat
+        waitms(1000)
         debug("Modem starting...")
-        if modem.checkReady(1000)
+        if modem.isReady()
             debug("Modem ready")
             quit
-        waitms(1000)
 
-    status := modem.getModemModel(@buf, 128, 2000)
+    status := modem.getModemModel(@buf, 128)
     debug("getModemModel after changing baud", udec(status), zstr(@buf))
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

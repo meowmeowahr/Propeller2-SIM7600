@@ -2,13 +2,13 @@
 
 '' =================================================================================================
 ''
-''   File....... ka_urc_ring.spin2
+''   File....... ka_ring_buffer.spin2
 ''   Purpose.... Ring buffer for AT Modem URC Queue
 ''   Authors.... Kevin Ahr
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 04 JUN 2026
-''   Updated.... 04 JUN 2026
+''   Updated.... 05 JUN 2026
 ''
 '' =================================================================================================
 
@@ -16,30 +16,32 @@ OBJ
     cf          : "ka_modem_settings"
 
 VAR
-    BYTE    urc_queue[cf.BUF_SIZE]                                  ' unsolicited response buffer/queue
-    LONG    urc_starts[cf.MAX_FRAMES]                               ' urc indices in fifo
+    BYTE    ring_buffer[cf.BUF_SIZE]                                ' frame byte ring buffer
+    LONG    frame_starts[cf.MAX_FRAMES]                             ' frame start indices in fifo
 
-    LONG    buf_tail                                                ' next free byte position for urc
+    LONG    buf_tail                                                ' next free byte position in ring
     LONG    starts_head                                             ' index read pointer
     LONG    starts_tail                                             ' index write pointer
-    LONG    urc_count                                               ' number of complete urcs in queue
+    LONG    frame_count                                             ' number of complete frames in queue
 
     LONG    wip_start                                               ' byte-ring offset where current partial frame began
     LONG    wip_len                                                 ' bytes written so far into current partial frame
     LONG    wip_active                                              ' non-zero while a partial frame is open
 
-PUB urcQueueInit()
+PUB ringBufferInit()
 
     buf_tail   := 0
     starts_head   := 0
     starts_tail   := 0
-    urc_count  := 0
+    frame_count := 0
     wip_start  := 0
     wip_len    := 0
     wip_active := 0
+    bytefill(@ring_buffer, 0, cf.BUF_SIZE)
+    longfill(@frame_starts, 0, cf.MAX_FRAMES)
 
 
-PUB urcQueuePut(c)
+PUB ringBufferPut(c)
 
     if not wip_active
         wip_start  := buf_tail
@@ -47,79 +49,79 @@ PUB urcQueuePut(c)
         wip_active := 1
         debug("frame_putc: new frame started at buf[", udec_(wip_start), "]")
 
-    repeat while urcQueueMemFree() == 0
+    repeat while ringBufferMemFree() == 0
         ' the queue is full
-        urcQueueDrop()
+        ringBufferDrop()
 
-    urc_queue[buf_tail] := c
+    ring_buffer[buf_tail] := c
     buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
     wip_len++
 
 
-PUB urcQueueCommit() : ok
+PUB ringBufferCommit() : ok
 
     if not wip_active
         ok := 0
         ' there is nothing to commit
         return
 
-    repeat while urcQueueMemFree() == 0
+    repeat while ringBufferMemFree() == 0
         ' the queue is full, must make room for null terminator
-        urcQueueDrop()
+        ringBufferDrop()
 
-    urc_queue[buf_tail] := 0                            ' null terminator
+    ring_buffer[buf_tail] := 0                            ' null terminator
     buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
 
-    ' drop oldest urc is the ring is full
-    if urc_count >= cf.MAX_FRAMES
-        debug("frame_commit: urc ring full — dropping oldest frame entry")
-        urcQueueDrop()
+    ' drop oldest frame if the ring is full
+    if frame_count >= cf.MAX_FRAMES
+        debug("frame_commit: ring full — dropping oldest frame entry")
+        ringBufferDrop()
 
     ' Register frame start in index ring
-    urc_starts[starts_tail] := wip_start
+    frame_starts[starts_tail] := wip_start
     starts_tail  := (starts_tail + 1) & (cf.MAX_FRAMES - 1)
-    urc_count++
+    frame_count++
 
-    debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(urc_count))
+    debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(frame_count))
 
     wip_active := 0
     wip_len    := 0
     ok := 1
 
 
-PUB urcQueueWriteStr(pStr) | c
+PUB ringBufferWriteStr(pStr) | c
 
     debug("frame_write: enqueueing string")
     repeat
         c := BYTE[pStr++]
         if c == 0
             quit
-        urcQueuePut(c)
+        ringBufferPut(c)
 
-    urcQueueCommit()
+    ringBufferCommit()
 
 
-PUB urcQueueReadStr(pDst, maxLen) : n
+PUB ringBufferReadStr(pDst, maxLen) : n
 
-    n := urcQueuePeekStr(pDst, maxLen)
+    n := ringBufferPeekStr(pDst, maxLen)
 
     ' advance head
     starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
-    urc_count--
+    frame_count--
 
 
-PUB urcQueuePeekStr(pDst, maxLen) : n | src, c
+PUB ringBufferPeekStr(pDst, maxLen) : n | src, c
 
-    if urc_count == 0
+    if frame_count == 0
         ' ring is empty
         n := -1
         return
 
-    src := urc_starts[starts_head]
+    src := frame_starts[starts_head]
     n   := 0
 
     repeat
-        c := urc_queue[src]
+        c := ring_buffer[src]
         src := (src + 1) & (cf.BUF_SIZE - 1)
         if n < maxLen - 1
             BYTE[pDst][n] := c
@@ -131,27 +133,27 @@ PUB urcQueuePeekStr(pDst, maxLen) : n | src, c
     n--                                                 ' char count w/o null term
 
 
-PUB urcQueueCount() : n
-    n := urc_count
+PUB ringBufferCount() : n
+    n := frame_count
 
 
-PUB urcQueueIsEmpty() : e
-    e := (urc_count == 0)
+PUB ringBufferIsEmpty() : e
+    e := (frame_count == 0)
 
 
-PUB urcQueueIsFull() : f
-    f := (urc_count >= cf.MAX_FRAMES)
+PUB ringBufferIsFull() : f
+    f := (frame_count >= cf.MAX_FRAMES)
 
 
-PRI urcQueueMemFree() : FREE | oldest_start
+PRI ringBufferMemFree() : FREE | oldest_start
 
-    if urc_count == 0 AND not wip_active
+    if frame_count == 0 AND not wip_active
         FREE := cf.BUF_SIZE                             ' ring is empty
         return
 
     ' oldest live byte is either the oldest complete frame or the start of the current partial frame
-    if urc_count > 0
-        oldest_start := urc_starts[starts_head]
+    if frame_count > 0
+        oldest_start := frame_starts[starts_head]
     else
         oldest_start := wip_start
 
@@ -159,14 +161,14 @@ PRI urcQueueMemFree() : FREE | oldest_start
     FREE := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
 
 
-PRI urcQueueDrop()
+PRI ringBufferDrop()
 
-    if urc_count == 0
+    if frame_count == 0
         ' nothing to drop
         return
 
     starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
-    urc_count--
+    frame_count--
 
 CON { license }
 

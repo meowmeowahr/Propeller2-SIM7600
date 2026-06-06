@@ -1,21 +1,48 @@
+{Spin2_v53}
+
 '' =================================================================================================
 ''
-''   File....... ka_modem_settings.spin2
-''   Purpose.... Configuration for AT Modem
+''   File....... 03_signal_strength.spin2
+''   Purpose.... Get connection strength and bit error rate from SIM7600
 ''   Authors.... Kevin Ahr
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
-''   Started.... 04 JUN 2026
-''   Updated.... 04 JUN 2026
+''   Started.... 05 JUN 2026
+''   Updated.... 05 JUN 2026
 ''
 '' =================================================================================================
 
-CON { rx/tx buffer settings }
-    ' RX/TX queue storage, size must be a power of 2
-    BUF_SIZE    = 1024
+CON
+    CLKFREQ_  = 200_000_000
 
-    ' Max messages the rx and tx queue can store, must be a power of 2
-    MAX_FRAMES  = 64
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+OBJ
+
+    modem       : "ka_sim7600"
+    utils       : "ka_modem_utils"
+
+PUB main() | status, BYTE rssi, BYTE ber
+    modem.start(RX, TX, DTR, RST, 115_200, 0)
+
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        debug("Modem starting...")
+        if modem.isReady()
+            debug("Modem ready")
+            quit
+
+    repeat
+        status := modem.getModemSignalStrength(@rssi, @ber)
+        if status <> modem.RESULT_OK
+            debug("error getting rssi+ber")
+        else
+            debug(SDEC_BYTE(utils.rssiValueToDbm(rssi)), udec(ber))
+        waitms(1000)
 
 CON { license }
 

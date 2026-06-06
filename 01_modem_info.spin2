@@ -1,7 +1,16 @@
-'' =========================================================================
-'' SIM7600 basic AT + version info helpers
-'' Spin2 v53
-'' =========================================================================
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 01_modem_info.spin2
+''   Purpose.... Get basic info from SIM7600 Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 04 JUN 2026
+''   Updated.... 05 JUN 2026
+''
+'' =================================================================================================
 
 CON
     CLKFREQ_  = 200_000_000
@@ -20,26 +29,52 @@ PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only need
 
     ' Wait until modem is ready
     repeat
+        waitms(1000)
         debug("Modem starting...")
-        if modem.checkReady(1000)
+        if modem.isReady()
             debug("Modem ready")
             quit
 
-    status := modem.getModemFirmwareRevision(@buf, 128, 2000)
+    status := modem.getModemFirmwareRevision(@buf, 128)
     debug("getModemFirmwareRevision ", sdec(status), zstr(@buf))
 
-    status := modem.getModemModel(@buf, 128, 2000)
+    status := modem.getModemModel(@buf, 128)
     debug("getModemModel ", sdec(status), zstr(@buf))
 
-    status := modem.getModemManufacturer(@buf, 128, 2000)
+    status := modem.getModemManufacturer(@buf, 128)
     debug("getModemManufacturer ", sdec(status), zstr(@buf))
 
-    status := modem.getModemSerialNumber(@buf, 128, 2000)
+    status := modem.getModemSerialNumber(@buf, 128)
     debug("getModemSerialNumber ", sdec(status), zstr(@buf))
 
-    status := modem.getSupportedBaudRates(@bauds, 24, 2000)
-    debug("getSupportedBaudRates count ", sdec(status), udec_long_array(@bauds, status))
+    status := modem.getSupportedBaudRates(@bauds, 24)
+    if status <> -1 ' no error getting bauds count
+        debug("getSupportedBaudRates count ", sdec(status), udec_long_array(@bauds, status))
+    else
+        debug("error getting baud rates")
 
-    longfill(@bauds, 0, 24)
-    status := modem.getSupportedTemporaryBaudRates(@bauds, 24, 2000)
-    debug("getSupportedTemporaryBaudRates count ", sdec(status), udec_long_array(@bauds, status))
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}
