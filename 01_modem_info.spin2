@@ -13,7 +13,8 @@
 '' =================================================================================================
 
 CON
-    CLKFREQ_  = 200_000_000
+
+    _CLKFREQ  = 200_000_000
 
     RX        = 1
     TX        = 0
@@ -22,7 +23,7 @@ CON
 
 OBJ
 
-    modem         : "ka_sim7600"
+    modem       : "ka_sim7600"
 
 PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only needs 16
     modem.start(RX, TX, DTR, RST, 115_200, 0)
@@ -48,7 +49,7 @@ PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only need
     debug("getModemSerialNumber ", sdec(status), zstr(@buf))
 
     status := modem.getSupportedBaudRates(@bauds, 24)
-    if status <> -1 ' no error getting bauds count
+    if status <> -1                                     ' no error getting bauds count
         debug("getSupportedBaudRates count ", sdec(status), udec_long_array(@bauds, status))
     else
         debug("error getting baud rates")

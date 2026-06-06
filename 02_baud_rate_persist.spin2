@@ -13,7 +13,8 @@
 '' =================================================================================================
 
 CON
-    CLKFREQ_  = 200_000_000
+
+    _CLKFREQ  = 200_000_000
 
     RX        = 1
     TX        = 0
@@ -27,15 +28,15 @@ CON
         0, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115_200, 230_400, 460_800, 921_600, 3_000_000, 3_200_000, 3_686_400
     }}
 
-    OLD_BAUD = 115200 ' old baud rate, default for SIM7600 is 115200
-    NEW_BAUD = 921600 ' new baud rate to apply to non-volatile storage
+    OLD_BAUD  = 115200                                              ' old baud rate, default for SIM7600 is 115200
+    NEW_BAUD  = 921600                                              ' new baud rate to apply to non-volatile storage
 
 OBJ
 
     modem       : "ka_sim7600"
 
 PUB main() | status, buf[128]
-    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1) ' force device reset
+    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1)          ' force device reset
 
     ' Wait until modem is ready
     repeat
@@ -52,7 +53,7 @@ PUB main() | status, buf[128]
     debug("setPermanentBaudRate status ", udec(status))
 
     modem.stop()
-    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1) ' must reboot to apply
+    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1)          ' must reboot to apply
 
     ' Wait until modem is ready
     repeat
