@@ -90,8 +90,6 @@ PUB ringBufferCommit() : ok
 
 
 PUB ringBufferWriteStr(pStr) | c
-
-    debug("frame_write: enqueueing string")
     repeat
         c := BYTE[pStr++]
         if c == 0
@@ -145,10 +143,10 @@ PUB ringBufferIsFull() : f
     f := (frame_count >= cf.MAX_FRAMES)
 
 
-PRI ringBufferMemFree() : FREE | oldest_start
+PRI ringBufferMemFree() : free | oldest_start
 
     if frame_count == 0 AND not wip_active
-        FREE := cf.BUF_SIZE                             ' ring is empty
+        free := cf.BUF_SIZE                             ' ring is empty
         return
 
     ' oldest live byte is either the oldest complete frame or the start of the current partial frame
@@ -158,7 +156,7 @@ PRI ringBufferMemFree() : FREE | oldest_start
         oldest_start := wip_start
 
     ' distance from tail to oldest_start
-    FREE := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
+    free := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
 
 
 PRI ringBufferDrop()

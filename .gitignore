@@ -1,3 +1,5 @@
 *.binary
 *.p2asm
 *.log
+
+00_secrets.spin2

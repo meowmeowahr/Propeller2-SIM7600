@@ -1,0 +1,36 @@
+{Spin2_v53}
+
+OBJ
+    modem : "ka_sim7600"
+    str   : "string"
+
+VAR
+    opName[64]
+    opHNI[32]
+    count
+
+PUB main() | i
+    modem.start(1, 0, 2, 3, 115_200, 0)
+
+    repeat while not modem.isReady()
+        debug("Waiting for modem...")
+        waitms(500)
+
+    debug("Starting operator search...")
+    modem.startOperatorSearch()
+
+    repeat while modem.isOperatorSearching()
+        debug("Searching...")
+        waitms(1000)
+
+    count := modem.getOperatorCount()
+    debug("Found ", udec(count), " operators.")
+
+    i := 0
+    repeat while i < count
+        if modem.getOperatorName(i, @opName, 64) == modem.RESULT_OK
+            if modem.getOperatorHNI(i, @opHNI, 32) == modem.RESULT_OK
+                debug("Operator ", udec(i), ": ", zstr(@opName), " HNI: ", zstr(@opHNI))
+        i++
+
+    modem.stop()

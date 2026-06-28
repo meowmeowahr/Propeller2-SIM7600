@@ -1,16 +1,14 @@
 {Spin2_v53}
 
-'' =================================================================================================
 ''
-''   File....... ka_sim7600.spin2
-''   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
-''   Authors.... Kevin Ahr
-''               -- see below for terms of use
-''   E-mail..... meowmeowahr@gmail.com
-''   Started.... 04 JUN 2026
-''   Updated.... 05 JUN 2026
+'   File....... ka_sim7600.spin2
+'   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
+'   Authors.... Kevin Ahr
+'               -- see below for terms of use
+'   E-mail..... meowmeowahr@gmail.com
+'   Started.... 04 JUN 2026
+'   Updated.... 05 JUN 2026
 ''
-'' =================================================================================================
 
 CON
 
@@ -26,6 +24,8 @@ CON
 
     #0, RESULT_OK, RESULT_ERROR, RESULT_CME_ERROR, RESULT_CMS_ERROR, RESULT_ABORTED, RESULT_PROMPT
 
+    #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
+
 OBJ
     ser         : "jm_fullduplexserial"
     nstr        : "jm_nstr"
@@ -33,6 +33,7 @@ OBJ
 
     fifoRx      : "ka_ring_buffer"
     fifoTx      : "ka_ring_buffer"
+    fifoUrc     : "ka_ring_buffer"
 
 VAR
     BYTE    rxP, txP, dtrP, rstP
@@ -50,11 +51,35 @@ VAR
 
     WORD    lastCmeError, lastCmsError
 
-    LONG    modemStack[MAX_LINE_LENGTH + 128]
+    LONG    modemStack[MAX_LINE_LENGTH + 200]
 
     BYTE    doInitialReset
 
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
+
+    BYTE    urcType
+
+    ' MQTT specific variables
+    BYTE    mqttClientNum
+    WORD    mqttPayloadExpected
+    WORD    mqttPayloadLen
+    BYTE    inMqttPayload
+    BYTE    mqttPayloadReady
+    BYTE    mqttPayloadBuffer[MAX_RESPONSE]                         ' Buffer to hold MQTT payload data
+
+    ' MQTT Topic specific variables
+    WORD    mqttTopicExpected
+    WORD    mqttTopicLen
+    BYTE    inMqttTopic
+    BYTE    mqttTopicBuffer[MAX_LINE_LENGTH]
+
+    ' Prompt-driven command variables
+    LONG    inWaitingPayloadAddr
+    LONG    inWaitingPayloadLen
+    BYTE    inWaitingForPrompt
+
+    ' MQTT Connection status variable
+    WORD    mqttConnectResult
 
 PUB main()
 
@@ -89,6 +114,23 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
 
     fifoRx.ringBufferInit()
     fifoTx.ringBufferInit()
+    fifoUrc.ringBufferInit()
+    mqttPayloadLen := 0
+    mqttPayloadExpected := 0
+    mqttClientNum := 0
+    inMqttPayload := 0
+    mqttPayloadReady := 0
+    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
+
+    mqttTopicLen := 0
+    mqttTopicExpected := 0
+    inMqttTopic := 0
+    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
+
+    inWaitingPayloadAddr := 0
+    inWaitingPayloadLen := 0
+    inWaitingForPrompt := false
+    mqttConnectResult := $FF
 
 
 PUB stop()
@@ -97,6 +139,23 @@ PUB stop()
     cogstop(cogId)
     fifoRx.ringBufferInit()
     fifoTx.ringBufferInit()
+    fifoUrc.ringBufferInit()
+    mqttPayloadLen := 0
+    mqttPayloadExpected := 0
+    mqttClientNum := 0
+    inMqttPayload := 0
+    mqttPayloadReady := 0
+    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
+
+    mqttTopicLen := 0
+    mqttTopicExpected := 0
+    inMqttTopic := 0
+    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
+
+    inWaitingPayloadAddr := 0
+    inWaitingPayloadLen := 0
+    inWaitingForPrompt := false
+    mqttConnectResult := $FF
 
 
 PUB hardReset()
@@ -119,6 +178,60 @@ PUB getCommandResult() : r
 
 PUB getCommandResponse() : r
     r := @responseBuffer
+
+
+PUB getInWaitingUrcType() : r
+    if fifoUrc.ringBufferIsEmpty()
+        r := URC_NONE
+        return
+
+    ' Peek at the first URC in buffer to determine type
+    fifoUrc.ringBufferPeekStr(@rxP, MAX_LINE_LENGTH)    ' Use rxP as temp buffer
+    if str.startswith(@rxP, @"+CMQTTRXPAYLOAD: ")
+        r := URC_MQTT_RX_PAYLOADSTART
+    elseif str.startswith(@rxP, @"+CMQTTRXEND: ")
+        r := URC_MQTT_RX_PAYLOAD
+    else
+        r := URC_NONE                                   ' Shouldn't happen if we only put MQTT URCs in buffer
+
+
+PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
+' Check if we have a payload ready (i.e., we have received the END URC for a buffered PAYSTART)
+
+    ifnot mqttPayloadReady
+        r := RESULT_ERROR
+        return
+
+    ' Check that there is at least one URC in the buffer
+    if fifoUrc.ringBufferIsEmpty()
+        r := RESULT_ERROR
+        return
+
+    ' Optional: verify that the first URC is indeed a CMQTTRXEND URC
+    fifoUrc.ringBufferPeekStr(@rxP, MAX_LINE_LENGTH)
+    ifnot str.startswith(@rxP, @"+CMQTTRXEND: ")
+        r := RESULT_ERROR
+        return
+
+    ' Remove the URC from the buffer
+    fifoUrc.ringBufferReadStr(@rxP, MAX_LINE_LENGTH)
+
+    ' Copy the payload data to the destination buffer
+    lenToCopy := mqttPayloadLen <# maxLen               ' Lesser of actual length or max allowed
+    bytemove(pDst, @mqttPayloadBuffer, lenToCopy)
+    BYTE[pDst][lenToCopy] := 0                          ' Null terminate
+
+    ' Reset MQTT state
+    mqttPayloadLen := 0
+    mqttPayloadExpected := 0
+    mqttTopicLen := 0
+    mqttTopicExpected := 0
+    mqttClientNum := 0
+    inMqttPayload := 0
+    inMqttTopic := 0
+    mqttPayloadReady := 0
+
+    r := RESULT_OK
 
 
 PUB isReady() : ready
@@ -149,6 +262,120 @@ PUB getModemManufacturer(p_resp, maxLen) : r
 PUB getModemSerialNumber(p_resp, maxLen) : r
 
     r := runCommandAndGetResponse(@"AT+CGSN", p_resp, maxLen)
+
+
+PUB startOperatorSearch()
+
+    sendCommand(@"AT+COPS=?")
+
+
+PUB stopOperatorSearch()
+
+    ser.tx(32)                                          ' Send space as interrupt
+
+
+PUB isOperatorSearching() : r
+    r := isCommandRunning()
+
+
+PUB getOperatorCount() : r | addr, count, tmpAddr, isOperator
+
+    addr := findCopsStart()
+    if addr == -1
+        return 0
+
+    count := 0
+    repeat while (BYTE[addr] <> 0) AND (BYTE[addr] <> 13)
+        if BYTE[addr] == "("
+            ' The operator blocks start with (status, "name", "reg", "plmn", access)
+            ' The trailing blocks are (0,1,2,3,4,5) and (0,1,2)
+            ' distinguish by checking if the block contains a quote
+
+            tmpAddr := addr
+            isOperator := false
+            repeat while (BYTE[tmpAddr] <> ")") AND (BYTE[tmpAddr] <> 0)
+                if BYTE[tmpAddr] == 34
+                    isOperator := true
+                    quit
+                tmpAddr++
+
+            if isOperator
+                count++
+        addr++
+    r := count
+
+
+PUB getOperatorName(index, p_name, maxLen) : r | addr, found, i
+
+    addr := findCopsStart()
+    if addr == -1
+        return RESULT_ERROR
+
+    found := 0
+    repeat while (BYTE[addr] <> 0) AND (BYTE[addr] <> 13)
+        if BYTE[addr] == "("
+            if found == index
+                addr++                                  ' skip (
+                repeat while (BYTE[addr] <> ",") AND (BYTE[addr] <> 0)
+                    addr++
+                addr++                                  ' skip comma
+
+                ' Skip leading quote
+                repeat while (BYTE[addr] == 34 OR BYTE[addr] == 147 OR BYTE[addr] == 148)
+                    addr++
+
+                i := 0
+                repeat while (BYTE[addr] <> 34 AND BYTE[addr] <> 148 AND BYTE[addr] <> 149 AND BYTE[addr] <> 0) AND (i < maxLen - 1)
+                    BYTE[p_name + i] := BYTE[addr]
+                    addr++
+                    i++
+                BYTE[p_name + i] := 0
+                return RESULT_OK
+            found++
+        addr++
+    return RESULT_ERROR
+
+
+PUB getOperatorHNI(index, p_hni, maxLen) : r | addr, found, commaCount, i
+
+    addr := findCopsStart()
+    if addr == -1
+        return RESULT_ERROR
+
+    found := 0
+    repeat while (BYTE[addr] <> 0) AND (BYTE[addr] <> 13)
+        if BYTE[addr] == "("
+            if found == index
+                commaCount := 0
+                repeat while (BYTE[addr] <> ")") AND (BYTE[addr] <> 0)
+                    if BYTE[addr] == ","
+                        commaCount++
+                        if commaCount == 3
+                            addr++                      ' skip 3rd comma
+                            repeat while (BYTE[addr] == 34 OR BYTE[addr] == 147 OR BYTE[addr] == 148)
+                                addr++
+
+                            i := 0
+                            repeat while (BYTE[addr] <> 34 AND BYTE[addr] <> 148 AND BYTE[addr] <> 149 AND BYTE[addr] <> 0) AND (i < maxLen - 1)
+                                BYTE[p_hni + i] := BYTE[addr]
+                                addr++
+                                i++
+                            BYTE[p_hni + i] := 0
+                            return RESULT_OK
+                    addr++
+            found++
+        addr++
+    return RESULT_ERROR
+
+
+PRI findCopsStart() : addr
+
+    addr := @responseBuffer
+    repeat while (BYTE[addr] <> 0)
+        if str.startswith(addr, @"+COPS: ")
+            return addr + 7
+        addr++
+    return -1
 
 
 PUB getSupportedBaudRates(pBuf, maxLen) : count | tmp[128], src, val, pOut, i
@@ -215,7 +442,16 @@ PRI runCommand(p_cmdStr) : r
     r := getCommandResult()
 
 
-PRI runCommandAndGetResponse(p_cmdStr, p_resp, maxLen) : r
+PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r
+    inWaitingPayloadAddr := p_payload
+    inWaitingPayloadLen := payloadLen
+    inWaitingForPrompt := true
+    sendCommand(p_cmdStr)
+    repeat while isCommandRunning()
+    r := getCommandResult()
+
+
+PUB runCommandAndGetResponse(p_cmdStr, p_resp, maxLen) : r
     sendCommand(p_cmdStr)
     repeat while isCommandRunning()
     strcopy(p_resp, getCommandResponse(), maxLen)
@@ -260,7 +496,7 @@ PRI appendResponse(buf) | len, i, c, responseLen
     BYTE[responseBuffer][responseLen] := 0
 
 
-PRI modemCog() | inChar, buf[MAX_LINE_LENGTH]
+PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
     if doInitialReset
         hardReset()
     else
@@ -269,16 +505,23 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH]
     repeat
         repeat
             inChar := ser.rxCheck()
-            ifnot inChar == -1
             case inChar
                 -1:                                     ' no data
                     quit
                 10, 13:
                     fifoRx.ringBufferCommit()
+                ">":
+                    if inWaitingForPrompt
+                        inWaitingForPrompt := false
+                        if inWaitingPayloadAddr <> 0 and inWaitingPayloadLen > 0
+                            repeat i from 0 to inWaitingPayloadLen - 1
+                                ser.tx(BYTE[inWaitingPayloadAddr][i])
+                    else
+                        fifoRx.ringBufferPut(inChar)
                 other:
                     fifoRx.ringBufferPut(inChar)
 
-        if fifoTx.ringBufferCount > 0
+        if fifoTx.ringBufferCount() > 0
             fifoTx.ringBufferReadStr(@buf, MAX_LINE_LENGTH)
             str.COPY(@inWaitingCommand, @buf)
             ser.str(@inWaitingCommand)
@@ -304,6 +547,94 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH]
             elseif strcomp(@buf, @"+CPIN: READY")
                 simIsReady := true
                 debug("SIM subsystem marked as ready")
+            ' MQTT URCs - buffer for later processing
+            elseif str.startswith(@buf, @"+CMQTTRXSTART: ")
+                debug("MQTT RX Start URC: ", zstr(@buf))
+            elseif str.startswith(@buf, @"+CMQTTRXTOPIC: ")
+                addr := @buf + 16                       ' Skip "+CMQTTRXTOPIC: "
+                mqttClientNum := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    mqttTopicExpected := str.atoi(addr)
+                else
+                    mqttTopicExpected := 0
+                mqttTopicLen := 0
+                inMqttTopic := 1
+                bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
+                debug("MQTT RX Topic URC: client=", udec(mqttClientNum), " bytes=", udec(mqttTopicExpected))
+            elseif str.startswith(@buf, @"+CMQTTRXPAYLOAD: ")
+                addr := @buf + 18                       ' Skip "+CMQTTRXPAYLOAD: "
+                mqttClientNum := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    mqttPayloadExpected := str.atoi(addr)
+                else
+                    mqttPayloadExpected := 0
+                mqttPayloadLen := 0
+                inMqttPayload := 1
+                bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
+                debug("MQTT RX Payload URC: client=", udec(mqttClientNum), " bytes=", udec(mqttPayloadExpected))
+            elseif str.startswith(@buf, @"+CMQTTRXEND: ")
+                ' Verify this END matches our expected client
+                addr := @buf + 13                       ' Skip "+CMQTTRXEND: "
+                clientNumFromUrc := str.atoi(addr)
+                if mqttClientNum == clientNumFromUrc
+                    inMqttPayload := 0                  ' Done receiving payload
+                    mqttPayloadReady := 1               ' Payload ready for retrieval
+
+                    ' Queue the URC to notify the client
+                    fifoUrc.ringBufferWriteStr(@buf)
+                    fifoUrc.ringBufferCommit()
+                    debug("MQTT RX End URC matched client=", udec(mqttClientNum), " URC=", zstr(@buf))
+                else
+                    debug("MQTT END URC client mismatch: expected=", udec(mqttClientNum), " got=", udec(clientNumFromUrc))
+            elseif str.startswith(@buf, @"+CMQTTCONNECT: ")
+                addr := @buf + 15                       ' Skip "+CMQTTCONNECT: "
+                clientNumFromUrc := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    mqttConnectResult := str.atoi(addr)
+                else
+                    mqttConnectResult := 1              ' Error
+                debug("MQTT Connect Result URC: client=", udec(clientNumFromUrc), " result=", udec(mqttConnectResult))
+
+            ' Handle incoming MQTT topic data
+            elseif inMqttTopic
+                len := strsize(@buf)
+                if mqttTopicLen + len < MAX_LINE_LENGTH
+                    bytemove(@mqttTopicBuffer + mqttTopicLen, @buf, len)
+                    mqttTopicLen += len
+                    debug("MQTT topic byte received, len=", udec(len), " total=", udec(mqttTopicLen), "/", udec(mqttTopicExpected))
+                else
+                    debug("MQTT topic buffer overflow!")
+                    inMqttTopic := 0
+
+                if mqttTopicLen >= mqttTopicExpected
+                    inMqttTopic := 0
+                    debug("MQTT topic complete: ", zstr(@mqttTopicBuffer))
+
+            ' Handle incoming MQTT payload data
+            elseif inMqttPayload
+                ' Add this line's data to our payload buffer
+                len := strsize(@buf)                    ' Get length of this line
+                if mqttPayloadLen + len < MAX_RESPONSE
+                    bytemove(@mqttPayloadBuffer + mqttPayloadLen, @buf, len)
+                    mqttPayloadLen += len
+                    debug("MQTT payload byte received, len=", udec(len), " total=", udec(mqttPayloadLen), "/", udec(mqttPayloadExpected))
+                else
+                    debug("MQTT payload buffer overflow!")
+                    inMqttPayload := 0                  ' Reset on error
+
+                ' Check if we've received all expected data
+                if mqttPayloadLen >= mqttPayloadExpected
+                    debug("MQTT payload complete: ", udec(mqttPayloadLen), " bytes received")
+
             ' response
             elseif strcomp(@buf, @inWaitingCommand)
                 inWaitingEchoed := true
@@ -341,3 +672,119 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH]
                 appendResponse(@buf)
             else
                 debug("ERR: Received unrecognized response: ", zstr(@buf))
+
+
+PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
+' Check if we have a payload/topic ready
+
+    ifnot mqttPayloadReady
+        r := RESULT_ERROR
+        return
+
+    ' Copy the topic data to the destination buffer
+    lenToCopy := mqttTopicLen <# maxLen                 ' Lesser of actual length or max allowed
+    bytemove(pDst, @mqttTopicBuffer, lenToCopy)
+    BYTE[pDst][lenToCopy] := 0                          ' Null terminate
+
+    r := RESULT_OK
+
+
+PUB mqttStart() : r
+    r := runCommand(@"AT+CMQTTSTART")
+
+
+PUB mqttStop() : r
+    r := runCommand(@"AT+CMQTTSTOP")
+
+
+PUB mqttAcquireClient(clientNum, pClientName) : r | tmp[128]
+    str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c\000", clientNum, 34, pClientName, 34)
+    r := runCommand(@tmp)
+
+
+PUB mqttWillTopic(clientNum, pWillTopic) : r | topicLen, tmp[64]
+    topicLen := strsize(pWillTopic)
+    str.sprintf2(@tmp, @"AT+CMQTTWILLTOPIC=%d,%d\000", clientNum, topicLen)
+    r := runCommandWithPayload(@tmp, pWillTopic, topicLen)
+
+
+PUB mqttWillMsg(clientNum, pWillMsg, qos) : r | msgLen, tmp[64]
+    msgLen := strsize(pWillMsg)
+    str.sprintf3(@tmp, @"AT+CMQTTWILLMSG=%d,%d,%d\000", clientNum, msgLen, qos)
+    r := runCommandWithPayload(@tmp, pWillMsg, msgLen)
+
+
+PUB mqttConnect(clientNum, pAddress, keepAlive, cleanSession, pUsername, pPassword) : r | tmp[512], tmp2[128], args[6]
+    args[0] := clientNum
+    args[1] := 34
+    args[2] := pAddress
+    args[3] := 34
+    args[4] := keepAlive
+    args[5] := cleanSession
+    str.sprintf(@tmp, @"AT+CMQTTCONNECT=%d,%c%s%c,%d,%d\000", @args)
+
+    if pUsername <> 0 and strsize(pUsername) > 0
+        str.sprintf3(@tmp2, @",%c%s%c\000", 34, pUsername, 34)
+        str.append(@tmp, @tmp2)
+        if pPassword <> 0 and strsize(pPassword) > 0
+            str.sprintf3(@tmp2, @",%c%s%c\000", 34, pPassword, 34)
+            str.append(@tmp, @tmp2)
+
+    mqttConnectResult := $FF
+    r := runCommand(@tmp)
+    if r <> RESULT_OK
+        return r
+
+    ' Wait for the +CMQTTCONNECT: <client_index>,<err_code> URC
+    ' Wait up to 20 seconds (400 * 50ms)
+    repeat 400
+        if mqttConnectResult <> $FF
+            quit
+        waitms(50)
+
+    if mqttConnectResult == 0
+        r := RESULT_OK
+    else
+        r := RESULT_ERROR
+
+
+PUB mqttSubscribe(clientNum, pTopic, qos) : r | topicLen, tmp[64]
+    topicLen := strsize(pTopic)
+    ' 1. Set subscription topic (which expects a prompt and payload)
+    str.sprintf3(@tmp, @"AT+CMQTTSUBTOPIC=%d,%d,%d\000", clientNum, topicLen, qos)
+    r := runCommandWithPayload(@tmp, pTopic, topicLen)
+    if r <> RESULT_OK
+        return r
+
+    ' 2. Execute subscription
+    str.sprintf1(@tmp, @"AT+CMQTTSUB=%d\000", clientNum)
+    r := runCommand(@tmp)
+
+
+PUB mqttDisconnect(clientNum, timeout) : r | tmp[64]
+    str.sprintf2(@tmp, @"AT+CMQTTDISC=%d,%d\000", clientNum, timeout)
+    r := runCommand(@tmp)
+
+
+PUB mqttReleaseClient(clientNum) : r | tmp[64]
+    str.sprintf1(@tmp, @"AT+CMQTTREL=%d\000", clientNum)
+    r := runCommand(@tmp)
+
+
+PUB definePdpContext(cid, pAPN) : r | tmp[128], args[6]
+    args[0] := cid
+    args[1] := 34
+    args[2] := 34
+    args[3] := 34
+    args[4] := pAPN
+    args[5] := 34
+    str.sprintf(@tmp, @"AT+CGDCONT=%d,%cIP%c,%c%s%c\000", @args)
+    r := runCommand(@tmp)
+
+
+PUB netOpen() : r
+    r := runCommand(@"AT+NETOPEN")
+
+
+PUB netClose() : r
+    r := runCommand(@"AT+NETCLOSE")

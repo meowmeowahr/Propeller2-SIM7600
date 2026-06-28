@@ -1,0 +1,144 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 05_mqtt_subscribe.spin2
+''   Purpose.... MQTT Subscriber Client Example for SIM7600 Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 28 JUN 2026
+''   Updated.... 28 JUN 2026
+''
+'' =================================================================================================
+
+CON
+
+    _CLKFREQ  = 200_000_000
+
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+OBJ
+
+    modem       : "ka_sim7600"
+    secrets     : "00_secrets"
+
+VAR
+
+    BYTE    topicBuf[128]
+    BYTE    payloadBuf[512]
+
+PUB main() | status
+    modem.start(RX, TX, DTR, RST, 115_200, 1)
+
+    ' leds off
+    pinl(56)
+    pinl(57)
+
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        debug("Modem starting...")
+        if modem.isReady()
+            debug("Modem ready!")
+            quit
+
+    ' Configure APN
+    status := modem.definePdpContext(1, string("hologram"))
+    debug("definePdpContext: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set APN")
+        return
+
+    ' Open Network
+    status := modem.netOpen()
+    debug("netOpen: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to open network")
+        return
+
+    ' Start MQTT Service
+    status := modem.mqttStart()
+    debug("mqttStart: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to start MQTT service")
+        return
+
+    ' acquire client 0
+    status := modem.mqttAcquireClient(0, string("p2_sim7600_client"))
+    debug("mqttAcquireClient: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to acquire client")
+        return
+
+
+    ' will topic
+    status := modem.mqttWillTopic(0, string("0123456789"))
+    debug("mqttWillTopic: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will topic")
+        return
+
+    ' will msg
+    status := modem.mqttWillMsg(0, string("qwerty"), 1)
+    debug("mqttWillMsg: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will msg")
+        return
+
+    ' connect
+    ' REPLACE THE MQTT ADDRESS WITH YOUR OWN SERVER
+    status := modem.mqttConnect(0, string("tcp://emqx.kevinbot.net:1883"), 60, 1, secrets.mqttUsername(), secrets.mqttPassword())
+    debug("mqttConnect: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to connect to broker")
+        return
+
+    ' 4. Subscribe to Topic
+    status := modem.mqttSubscribe(0, string("propeller2/io/56"), 0)
+    debug("mqttSubscribe: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to subscribe to topic")
+        return
+
+    ' 5. listen for incoming messages
+    debug("Waiting for MQTT messages...")
+    repeat
+        if modem.getInWaitingUrcType() == modem.URC_MQTT_RX_PAYLOAD
+            modem.getInWaitingMqttTopic(@topicBuf, 128)
+            modem.getInWaitingMqttPayload(@payloadBuf, 512)
+            if strcomp(@topicBuf, @"propeller2/io/56")
+                case byte[@payloadBuf]
+                    "t": pint(56)
+                    "h": pinh(56)
+                    "l": pinl(56)
+        waitms(100)
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}
