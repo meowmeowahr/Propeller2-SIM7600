@@ -17,6 +17,12 @@ The driver is tested in [FlexSpin 7.6.7](https://github.com/totalspectrum/flexpr
 * [PropPlug](https://www.parallax.com/product/prop-plug/)
 * I also used perfboard and female headers, as the module is too wide for the breadboard.
 
+## Carrier
+
+I successfully used [Hologram](https://www.hologram.io/) for my testing. I tried checking my IMEI with T-Mobile and Verizon directly, all saying that the device is incompatible.
+
+Hologram supports data and SMS, but voice calling is blocked.
+
 ## To Do
 
 * [x] Basic Modem Information
