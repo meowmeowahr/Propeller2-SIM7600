@@ -32,7 +32,6 @@ OBJ
     str         : "string"
 
     fifoRx      : "ka_ring_buffer"
-    fifoTx      : "ka_ring_buffer"
     fifoUrc     : "ka_ring_buffer"
 
 VAR
@@ -51,15 +50,12 @@ VAR
 
     WORD    lastCmeError, lastCmsError
 
-    LONG    modemStack[MAX_LINE_LENGTH + 200]
+    BYTE    modemStack[MAX_LINE_LENGTH + 200]
 
     BYTE    doInitialReset
 
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
 
-    BYTE    urcType
-
-    ' MQTT specific variables
     BYTE    mqttClientNum
     WORD    mqttPayloadExpected
     WORD    mqttPayloadLen
@@ -67,33 +63,19 @@ VAR
     BYTE    mqttPayloadReady
     BYTE    mqttPayloadBuffer[MAX_RESPONSE]                         ' Buffer to hold MQTT payload data
 
-    ' MQTT Topic specific variables
     WORD    mqttTopicExpected
     WORD    mqttTopicLen
     BYTE    inMqttTopic
     BYTE    mqttTopicBuffer[MAX_LINE_LENGTH]
 
-    ' Prompt-driven command variables
     LONG    inWaitingPayloadAddr
     LONG    inWaitingPayloadLen
     BYTE    inWaitingForPrompt
 
-    ' MQTT Connection status variable
     WORD    mqttConnectResult
 
-PUB main()
-
-    start(1, 0, 2, 3, 115_200, 1)
-
-    repeat
-        if modemIsReady
-            sendCommand(@"AT+COPS=?")
-            repeat
-                if isCommandRunning() == true
-                    debug("Command is running...")
-                else
-                    debug("Command result ", udec(getCommandResult()), zstr(getCommandResponse()))
-                waitms(1000)
+PUB null()
+' this is not a top-level object
 
 
 PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
@@ -113,7 +95,6 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
     cogId := cogspin(newcog, modemCog(), @modemStack)
 
     fifoRx.ringBufferInit()
-    fifoTx.ringBufferInit()
     fifoUrc.ringBufferInit()
     mqttPayloadLen := 0
     mqttPayloadExpected := 0
@@ -138,7 +119,6 @@ PUB stop()
     ser.stop()
     cogstop(cogId)
     fifoRx.ringBufferInit()
-    fifoTx.ringBufferInit()
     fifoUrc.ringBufferInit()
     mqttPayloadLen := 0
     mqttPayloadExpected := 0
@@ -333,7 +313,7 @@ PUB getOperatorName(index, p_name, maxLen) : r | addr, found, i
                 return RESULT_OK
             found++
         addr++
-    return RESULT_ERROR
+    r := RESULT_ERROR
 
 
 PUB getOperatorHNI(index, p_hni, maxLen) : r | addr, found, commaCount, i
@@ -365,7 +345,7 @@ PUB getOperatorHNI(index, p_hni, maxLen) : r | addr, found, commaCount, i
                     addr++
             found++
         addr++
-    return RESULT_ERROR
+    r := RESULT_ERROR
 
 
 PRI findCopsStart() : addr
@@ -451,7 +431,7 @@ PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r
     r := getCommandResult()
 
 
-PUB runCommandAndGetResponse(p_cmdStr, p_resp, maxLen) : r
+PRI runCommandAndGetResponse(p_cmdStr, p_resp, maxLen) : r
     sendCommand(p_cmdStr)
     repeat while isCommandRunning()
     strcopy(p_resp, getCommandResponse(), maxLen)
@@ -468,8 +448,10 @@ PRI sendCommand(p_cmdStr) | cmdLen
     inWaitingEchoed := false
     inWaitingCompleted := false
     bytefill(@responseBuffer, 0, MAX_RESPONSE)
-    fifoTx.ringBufferWriteStr(p_cmdStr)
-    debug("Commit command: ", zstr_(p_cmdStr))
+    ser.str(p_cmdStr)
+    ser.tx(ser.CR)
+    str.copy(@inWaitingCommand, p_cmdStr)
+    debug("Send command: ", zstr_(p_cmdStr))
 
 
 PRI onConnect()
@@ -480,7 +462,7 @@ PRI markModemReady()
     onConnect()
 
 
-PRI appendResponse(buf) | len, i, c, responseLen
+PRI appendResponse(buf) | len, responseLen
 
     len := strsize(buf)
 
@@ -520,14 +502,6 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                         fifoRx.ringBufferPut(inChar)
                 other:
                     fifoRx.ringBufferPut(inChar)
-
-        if fifoTx.ringBufferCount() > 0
-            fifoTx.ringBufferReadStr(@buf, MAX_LINE_LENGTH)
-            str.COPY(@inWaitingCommand, @buf)
-            ser.str(@inWaitingCommand)
-            ser.tx(ser.CR)
-            debug("TX: ", zstr(@inWaitingCommand))
-            bytefill(@buf, 0, MAX_LINE_LENGTH)          ' reset for rx
 
         if fifoRx.ringBufferCount() > 0
             fifoRx.ringBufferReadStr(@buf, MAX_LINE_LENGTH)

@@ -74,16 +74,15 @@ PUB main() | status
         debug("Failed to acquire client")
         return
 
-
     ' will topic
-    status := modem.mqttWillTopic(0, string("0123456789"))
+    status := modem.mqttWillTopic(0, string("p2_sim7600_client/will"))
     debug("mqttWillTopic: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to set will topic")
         return
 
     ' will msg
-    status := modem.mqttWillMsg(0, string("qwerty"), 1)
+    status := modem.mqttWillMsg(0, string("offline"), 1)
     debug("mqttWillMsg: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to set will msg")
@@ -97,21 +96,21 @@ PUB main() | status
         debug("Failed to connect to broker")
         return
 
-    ' 4. Subscribe to Topic
+    ' Subscribe to Topic
     status := modem.mqttSubscribe(0, string("propeller2/io/56"), 0)
     debug("mqttSubscribe: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to subscribe to topic")
         return
 
-    ' 5. listen for incoming messages
+    ' listen for incoming messages
     debug("Waiting for MQTT messages...")
     repeat
         if modem.getInWaitingUrcType() == modem.URC_MQTT_RX_PAYLOAD
             modem.getInWaitingMqttTopic(@topicBuf, 128)
             modem.getInWaitingMqttPayload(@payloadBuf, 512)
             if strcomp(@topicBuf, @"propeller2/io/56")
-                case byte[@payloadBuf]
+                case BYTE[@payloadBuf]
                     "t": pint(56)
                     "h": pinh(56)
                     "l": pinl(56)

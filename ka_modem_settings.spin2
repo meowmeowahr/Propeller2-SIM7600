@@ -12,7 +12,7 @@
 
 CON { rx/tx buffer settings }
     ' RX/TX queue storage, size must be a power of 2
-    BUF_SIZE    = 1024
+    BUF_SIZE    = 8192
 
     ' Max messages the rx and tx queue can store, must be a power of 2
     MAX_FRAMES  = 64

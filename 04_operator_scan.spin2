@@ -1,8 +1,8 @@
 {Spin2_v53}
 
 OBJ
-    modem : "ka_sim7600"
-    str   : "string"
+    modem       : "ka_sim7600"
+    str         : "string"
 
 VAR
     opName[64]
