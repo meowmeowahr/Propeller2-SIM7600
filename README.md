@@ -15,7 +15,7 @@ The driver is tested in [FlexSpin 7.6.7](https://github.com/totalspectrum/flexpr
 * [P2 Edge](https://www.parallax.com/product/p2-edge-module/)
 * Any of the P2 Edge breakouts work for testing. I used the [P2 Edge Module Breadboard](https://www.parallax.com/product/p2-edge-module-breadboard/).
 * [PropPlug](https://www.parallax.com/product/prop-plug/)
-* I also used perfboard and female headers, as the module is too wide for the breadboard.
+* I also soldered a perfboard and female headers, as the module is too wide for the breadboard.
 
 ## Carrier
 
@@ -31,6 +31,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] Network Operator Scanning
 * [x] APN Setup
 * [x] Baud Rate Configuration
+* [x] Device mode setting (normal, flight, limited, etc)
 * [ ] MQTT
 * [ ] SSL
 * [ ] SIM Locking
@@ -46,3 +47,16 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [ ] GPS/GNSS
 * [ ] Raw TCP
 * [ ] Raw UDP
+
+## License
+
+All work is under the MIT license.
+
+This project includes the following community objects:
+
+| Object                    | Author                     | License |
+| ------------------------- | -------------------------- | ------- |
+| jm_ansi.spin2             | Jon "JonnyMac" McPhalen    | MIT     |
+| jm_nstr.spin2             | Jon "JonnyMac" McPhalen    | MIT     |
+| jm_fullduplexserial.spin2 | Jon "JonnyMac" McPhalen    | MIT     |
+| string.spin2              | Jesse Burt                 | MIT     |
