@@ -74,7 +74,7 @@
         "-FIFO",
         "8192",
         "-FLASH",
-        "-p/dev/ttyUSB0"
+        "-p/dev/ttyUSB1"
     ],
     "spin2.optionsBuild": [
         "-2",
@@ -136,5 +136,5 @@
         "WCDMA",
         "zstr"
     ],
-    "spin2.serialPort": "/dev/ttyUSB0",
+    "spin2.serialPort": "/dev/ttyUSB1",
 }

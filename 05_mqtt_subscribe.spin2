@@ -109,6 +109,7 @@ PUB main() | status
         if modem.getInWaitingUrcType() == modem.URC_MQTT_RX_PAYLOAD
             modem.getInWaitingMqttTopic(@topicBuf, 128)
             modem.getInWaitingMqttPayload(@payloadBuf, 512)
+            modem.popInWaitingUrc()
             if strcomp(@topicBuf, @"propeller2/io/56")
                 case BYTE[@payloadBuf]
                     "t": pint(56)

@@ -159,7 +159,7 @@ PRI ringBufferMemFree() : free | oldest_start
     free := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
 
 
-PRI ringBufferDrop()
+PUB ringBufferDrop()
 
     if frame_count == 0
         ' nothing to drop
