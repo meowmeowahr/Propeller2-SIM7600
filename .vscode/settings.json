@@ -74,7 +74,7 @@
         "-FIFO",
         "8192",
         "-FLASH",
-        "-p/dev/ttyUSB0"
+        "-p/dev/ttyUSB1"
     ],
     "spin2.optionsBuild": [
         "-2",
@@ -98,6 +98,7 @@
     "spinExtension.toolchain.optionsDownload.enterTerminalAfter": "only when debug() compile enabled",
     "spinExtension.toolchain.optionsDownload.user.baudrate": 2000000,
     "cSpell.words": [
+        "Addrs",
         "atoi",
         "bytemove",
         "CGMI",
@@ -136,5 +137,5 @@
         "WCDMA",
         "zstr"
     ],
-    "spin2.serialPort": "/dev/ttyUSB0",
+    "spin2.serialPort": "/dev/ttyUSB1",
 }

@@ -830,6 +830,12 @@ PUB sprintf10(str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, ar
 ' 10-argument variant of sprintf()
     return sprintf(str, fmt, @arg1)
 
+' *** Added
+PUB sprintf12(str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12): idx
+' 12-argument variant of sprintf()
+    return sprintf(str, fmt, @arg1)
+
+
 PUB startswith(ptr_str, ptr_substr): flag
 ' Flag indicating string at ptr_str starts with the string at ptr_substr
 '   Returns:

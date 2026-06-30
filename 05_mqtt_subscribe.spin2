@@ -21,6 +21,11 @@ CON
     DTR       = 2
     RST       = 3
 
+CON
+    
+    MQTT_MAX_DATA   = 64
+    MQTT_MAX_TOPIC  = 32
+
 OBJ
 
     modem       : "ka_sim7600"
@@ -28,10 +33,9 @@ OBJ
 
 VAR
 
-    BYTE    topicBuf[128]
-    BYTE    payloadBuf[512]
+    BYTE    mqttResultBuffer[MQTT_MAX_DATA + MQTT_MAX_TOPIC + 2] ' buffer is TOPIC + null-term + PAYLOAD + null-term
 
-PUB main() | status
+PUB main() | status, topicLen, payloadLen, payloadPtr
     modem.start(RX, TX, DTR, RST, 115_200, 1)
 
     ' leds off
@@ -68,7 +72,7 @@ PUB main() | status
         return
 
     ' acquire client 0
-    status := modem.mqttAcquireClient(0, string("p2_sim7600_client"))
+    status := modem.mqttAcquireClient(0, string("p2_sim7600_client"), @mqttResultBuffer)
     debug("mqttAcquireClient: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to acquire client")
@@ -96,6 +100,11 @@ PUB main() | status
         debug("Failed to connect to broker")
         return
 
+    ' wait until we are connected
+    repeat while modem.getMqttClientStatus(0) <> modem.MQTT_SUCCESS
+        debug("Waiting for MQTT client")
+        waitms(100)
+
     ' Subscribe to Topic
     status := modem.mqttSubscribe(0, string("propeller2/io/56"), 0)
     debug("mqttSubscribe: ", sdec(status))
@@ -103,18 +112,44 @@ PUB main() | status
         debug("Failed to subscribe to topic")
         return
 
+    ' wait until we are subscribed
+    repeat while modem.getMqttSubscriptionStatus(0) <> modem.MQTT_SUCCESS
+        debug("Waiting for MQTT subscribe")
+        waitms(100)
+
     ' listen for incoming messages
     debug("Waiting for MQTT messages...")
     repeat
-        if modem.getInWaitingUrcType() == modem.URC_MQTT_RX_PAYLOAD
-            modem.getInWaitingMqttTopic(@topicBuf, 128)
-            modem.getInWaitingMqttPayload(@payloadBuf, 512)
-            if strcomp(@topicBuf, @"propeller2/io/56")
-                case BYTE[@payloadBuf]
-                    "t": pint(56)
-                    "h": pinh(56)
-                    "l": pinl(56)
+        if modem.isMqttMessageWaiting(0)
+            ' we have a message, get the topic and payload
+            topicLen := modem.getMqttTopic(0, @mqttResultBuffer, MQTT_MAX_TOPIC)
+            payloadLen := modem.getMqttPayload(0, @mqttResultBuffer[topicLen + 1], MQTT_MAX_DATA)
+
+            ' null terminate the topic and payload strings
+            BYTE[mqttResultBuffer[topicLen]] := 0
+            BYTE[mqttResultBuffer[topicLen + 1 + payloadLen]] := 0
+
+            debug("MQTT Message: topic=", zstr(mqttResultBuffer), " payload=", zstr(mqttResultBuffer[topicLen + 1]))
+
+            ' process the message
+            payloadPtr := @mqttResultBuffer[topicLen + 1]
+            if BYTE[payloadPtr] == "t"  ' toggle pin 56
+                pint(56)
+                debug("Toggled pin 56")
+            elseif BYTE[payloadPtr] == "h"  ' set pin 56 high
+                pinh(56)
+                debug("Set pin 56 high")
+            elseif BYTE[payloadPtr] == "l"  ' set pin 56 low
+                pinl(56)
+                debug("Set pin 56 low")
+            else
+                debug("Unknown command: ", udec(BYTE[payloadPtr]))
+
+            ' clear the message flag so we can receive the next one
+            modem.clearMqttMessage(0)
+
         waitms(100)
+
 
 CON { license }
 

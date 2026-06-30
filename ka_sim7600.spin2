@@ -1,14 +1,16 @@
 {Spin2_v53}
 
+'' =================================================================================================
 ''
-'   File....... ka_sim7600.spin2
-'   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
-'   Authors.... Kevin Ahr
-'               -- see below for terms of use
-'   E-mail..... meowmeowahr@gmail.com
-'   Started.... 04 JUN 2026
-'   Updated.... 05 JUN 2026
+''   File....... ka_sim7600.spin2
+''   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 04 JUN 2026
+''   Updated.... 29 JUN 2026
 ''
+'' =================================================================================================
 
 CON
 
@@ -24,6 +26,15 @@ CON
 
     #0, RESULT_OK, RESULT_ERROR, RESULT_CME_ERROR, RESULT_CMS_ERROR, RESULT_ABORTED, RESULT_PROMPT
 
+    #0, MQTT_SUCCESS, MQTT_FAIL, MQTT_BAD_UTF8, MQTT_SOCK_CONNECT_FAIL, MQTT_SOCK_CREATE_FAIL, MQTT_SOCK_CLOSE_FAIL, ...
+        MQTT_MSG_RECEIVE_FAIL, MQTT_NET_OPEN_FAIL, MQTT_NET_CLOSE_FAIL, MQTT_NET_NOT_OPENED, MQTT_CLIENT_INDEX_ERROR, ...
+        MQTT_NO_CONNECTION, MQTT_INVALID_PARAMETER, MQTT_OP_NOT_SUPPORTED, MQTT_CLIENT_BUSY, MQTT_REQUIRE_CONN_FAIL, ...
+        MQTT_SOCK_SEND_FAIL, MQTT_TIMEOUT, MQTT_TOPIC_EMPTY, MQTT_CLIENT_USED, MQTT_CLIENT_NOT_ACQUIRED, ...
+        MQTT_CLIENT_NOT_RELEASED, MQTT_LENGTH_OUT_OF_RANGE, MQTT_NET_IS_OPENED, MQTT_PACKET_FAIL, MQTT_DNS_ERROR, ...
+        MQTT_SOCK_CLOSED_BY_SERVER, MQTT_CONN_REFUSED_PROTO_VER, MQTT_CONN_REFUSED_ID_REJECTED, ...
+        MQTT_CONN_REFUSED_SERVER_UNAVAIL, MQTT_CONN_REFUSED_BAD_USER_PASS, MQTT_CONN_REFUSED_NOT_AUTH, ...
+        MQTT_HANDSHAKE_FAIL, MQTT_NO_CERT_SET, MQTT_OPEN_SSL_SESSION_FAIL
+
     #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
 
 OBJ
@@ -32,7 +43,6 @@ OBJ
     str         : "string"
 
     fifoRx      : "ka_ring_buffer"
-    fifoUrc     : "ka_ring_buffer"
 
 VAR
     BYTE    rxP, txP, dtrP, rstP
@@ -56,23 +66,20 @@ VAR
 
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
 
-    BYTE    mqttClientNum
-    WORD    mqttPayloadExpected
-    WORD    mqttPayloadLen
-    BYTE    inMqttPayload
-    BYTE    mqttPayloadReady
-    BYTE    mqttPayloadBuffer[MAX_RESPONSE]                         ' Buffer to hold MQTT payload data
-
-    WORD    mqttTopicExpected
-    WORD    mqttTopicLen
-    BYTE    inMqttTopic
-    BYTE    mqttTopicBuffer[MAX_LINE_LENGTH]
+    LONG    mqttMessageStackAddrs[2]
+    BYTE    mqttClientConnected[2] ' TODO: does this need to be a word. Module docs says result codes can be 0-1024, however, the only documented codes are 0-34
+    BYTE    mqttSubscriptionStatus[2] ' TODO: does this need to be a word. Module docs says result codes can be 0-1024, however, the only documented codes are 0-34
+    WORD    mqttTopicBytesRemaining[2]
+    WORD    mqttTopicTotalBytes[2]
+    BYTE    mqttTopicReceiving[2]
+    WORD    mqttPayloadBytesRemaining[2]
+    WORD    mqttPayloadTotalBytes[2]
+    BYTE    mqttPayloadReceiving[2]
+    BYTE    mqttMessageWaiting[2]    ' flag to indicate when a complete MQTT message is ready for processing
 
     LONG    inWaitingPayloadAddr
     LONG    inWaitingPayloadLen
     BYTE    inWaitingForPrompt
-
-    WORD    mqttConnectResult
 
 PUB null()
 ' this is not a top-level object
@@ -95,47 +102,34 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
     cogId := cogspin(newcog, modemCog(), @modemStack)
 
     fifoRx.ringBufferInit()
-    fifoUrc.ringBufferInit()
-    mqttPayloadLen := 0
-    mqttPayloadExpected := 0
-    mqttClientNum := 0
-    inMqttPayload := 0
-    mqttPayloadReady := 0
-    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
-
-    mqttTopicLen := 0
-    mqttTopicExpected := 0
-    inMqttTopic := 0
-    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
 
     inWaitingPayloadAddr := 0
     inWaitingPayloadLen := 0
     inWaitingForPrompt := false
-    mqttConnectResult := $FF
 
+    BYTE[mqttClientConnected[0]] := 255
+    BYTE[mqttClientConnected[1]] := 255
 
-PUB stop()
+    BYTE[mqttSubscriptionStatus[0]] := 255
+    BYTE[mqttSubscriptionStatus[1]] := 255
 
-    ser.stop()
-    cogstop(cogId)
-    fifoRx.ringBufferInit()
-    fifoUrc.ringBufferInit()
-    mqttPayloadLen := 0
-    mqttPayloadExpected := 0
-    mqttClientNum := 0
-    inMqttPayload := 0
-    mqttPayloadReady := 0
-    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
+    WORD[mqttPayloadBytesRemaining[0]] := 0
+    WORD[mqttPayloadBytesRemaining[1]] := 0
+    WORD[mqttPayloadTotalBytes[0]] := 0
+    WORD[mqttPayloadTotalBytes[1]] := 0
 
-    mqttTopicLen := 0
-    mqttTopicExpected := 0
-    inMqttTopic := 0
-    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
+    BYTE[mqttPayloadReceiving[0]] := false
+    BYTE[mqttPayloadReceiving[1]] := false
+    BYTE[mqttMessageWaiting[0]] := false
+    BYTE[mqttMessageWaiting[1]] := false
 
-    inWaitingPayloadAddr := 0
-    inWaitingPayloadLen := 0
-    inWaitingForPrompt := false
-    mqttConnectResult := $FF
+    WORD[mqttTopicBytesRemaining[0]] := 0
+    WORD[mqttTopicBytesRemaining[1]] := 0
+    WORD[mqttTopicTotalBytes[0]] := 0
+    WORD[mqttTopicTotalBytes[1]] := 0
+
+    BYTE[mqttTopicReceiving[0]] := false
+    BYTE[mqttTopicReceiving[1]] := false
 
 
 PUB hardReset()
@@ -158,60 +152,6 @@ PUB getCommandResult() : r
 
 PUB getCommandResponse() : r
     r := @responseBuffer
-
-
-PUB getInWaitingUrcType() : r
-    if fifoUrc.ringBufferIsEmpty()
-        r := URC_NONE
-        return
-
-    ' Peek at the first URC in buffer to determine type
-    fifoUrc.ringBufferPeekStr(@rxP, MAX_LINE_LENGTH)    ' Use rxP as temp buffer
-    if str.startswith(@rxP, @"+CMQTTRXPAYLOAD: ")
-        r := URC_MQTT_RX_PAYLOADSTART
-    elseif str.startswith(@rxP, @"+CMQTTRXEND: ")
-        r := URC_MQTT_RX_PAYLOAD
-    else
-        r := URC_NONE                                   ' Shouldn't happen if we only put MQTT URCs in buffer
-
-
-PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
-' Check if we have a payload ready (i.e., we have received the END URC for a buffered PAYSTART)
-
-    ifnot mqttPayloadReady
-        r := RESULT_ERROR
-        return
-
-    ' Check that there is at least one URC in the buffer
-    if fifoUrc.ringBufferIsEmpty()
-        r := RESULT_ERROR
-        return
-
-    ' Optional: verify that the first URC is indeed a CMQTTRXEND URC
-    fifoUrc.ringBufferPeekStr(@rxP, MAX_LINE_LENGTH)
-    ifnot str.startswith(@rxP, @"+CMQTTRXEND: ")
-        r := RESULT_ERROR
-        return
-
-    ' Remove the URC from the buffer
-    fifoUrc.ringBufferReadStr(@rxP, MAX_LINE_LENGTH)
-
-    ' Copy the payload data to the destination buffer
-    lenToCopy := mqttPayloadLen <# maxLen               ' Lesser of actual length or max allowed
-    bytemove(pDst, @mqttPayloadBuffer, lenToCopy)
-    BYTE[pDst][lenToCopy] := 0                          ' Null terminate
-
-    ' Reset MQTT state
-    mqttPayloadLen := 0
-    mqttPayloadExpected := 0
-    mqttTopicLen := 0
-    mqttTopicExpected := 0
-    mqttClientNum := 0
-    inMqttPayload := 0
-    inMqttTopic := 0
-    mqttPayloadReady := 0
-
-    r := RESULT_OK
 
 
 PUB isReady() : ready
@@ -422,9 +362,8 @@ PRI runCommand(p_cmdStr) : r
     r := getCommandResult()
 
 
-PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r
+PRI runCommandWithPayload(p_cmdStr, p_payload) : r
     inWaitingPayloadAddr := p_payload
-    inWaitingPayloadLen := payloadLen
     inWaitingForPrompt := true
     sendCommand(p_cmdStr)
     repeat while isCommandRunning()
@@ -478,7 +417,7 @@ PRI appendResponse(buf) | len, responseLen
     BYTE[responseBuffer][responseLen] := 0
 
 
-PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
+PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], i, client, rc, addr, payloadSize, topicSize
     if doInitialReset
         hardReset()
     else
@@ -495,9 +434,8 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 ">":
                     if inWaitingForPrompt
                         inWaitingForPrompt := false
-                        if inWaitingPayloadAddr <> 0 and inWaitingPayloadLen > 0
-                            repeat i from 0 to inWaitingPayloadLen - 1
-                                ser.tx(BYTE[inWaitingPayloadAddr][i])
+                        if inWaitingPayloadAddr <> 0
+                            ser.str(inWaitingPayloadAddr)
                     else
                         fifoRx.ringBufferPut(inChar)
                 other:
@@ -521,94 +459,7 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
             elseif strcomp(@buf, @"+CPIN: READY")
                 simIsReady := true
                 debug("SIM subsystem marked as ready")
-            ' MQTT URCs - buffer for later processing
-            elseif str.startswith(@buf, @"+CMQTTRXSTART: ")
-                debug("MQTT RX Start URC: ", zstr(@buf))
-            elseif str.startswith(@buf, @"+CMQTTRXTOPIC: ")
-                addr := @buf + 16                       ' Skip "+CMQTTRXTOPIC: "
-                mqttClientNum := str.atoi(addr)
-                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
-                    addr++
-                if BYTE[addr] == ","
-                    addr++
-                    mqttTopicExpected := str.atoi(addr)
-                else
-                    mqttTopicExpected := 0
-                mqttTopicLen := 0
-                inMqttTopic := 1
-                bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
-                debug("MQTT RX Topic URC: client=", udec(mqttClientNum), " bytes=", udec(mqttTopicExpected))
-            elseif str.startswith(@buf, @"+CMQTTRXPAYLOAD: ")
-                addr := @buf + 18                       ' Skip "+CMQTTRXPAYLOAD: "
-                mqttClientNum := str.atoi(addr)
-                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
-                    addr++
-                if BYTE[addr] == ","
-                    addr++
-                    mqttPayloadExpected := str.atoi(addr)
-                else
-                    mqttPayloadExpected := 0
-                mqttPayloadLen := 0
-                inMqttPayload := 1
-                bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
-                debug("MQTT RX Payload URC: client=", udec(mqttClientNum), " bytes=", udec(mqttPayloadExpected))
-            elseif str.startswith(@buf, @"+CMQTTRXEND: ")
-                ' Verify this END matches our expected client
-                addr := @buf + 13                       ' Skip "+CMQTTRXEND: "
-                clientNumFromUrc := str.atoi(addr)
-                if mqttClientNum == clientNumFromUrc
-                    inMqttPayload := 0                  ' Done receiving payload
-                    mqttPayloadReady := 1               ' Payload ready for retrieval
-
-                    ' Queue the URC to notify the client
-                    fifoUrc.ringBufferWriteStr(@buf)
-                    fifoUrc.ringBufferCommit()
-                    debug("MQTT RX End URC matched client=", udec(mqttClientNum), " URC=", zstr(@buf))
-                else
-                    debug("MQTT END URC client mismatch: expected=", udec(mqttClientNum), " got=", udec(clientNumFromUrc))
-            elseif str.startswith(@buf, @"+CMQTTCONNECT: ")
-                addr := @buf + 15                       ' Skip "+CMQTTCONNECT: "
-                clientNumFromUrc := str.atoi(addr)
-                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
-                    addr++
-                if BYTE[addr] == ","
-                    addr++
-                    mqttConnectResult := str.atoi(addr)
-                else
-                    mqttConnectResult := 1              ' Error
-                debug("MQTT Connect Result URC: client=", udec(clientNumFromUrc), " result=", udec(mqttConnectResult))
-
-            ' Handle incoming MQTT topic data
-            elseif inMqttTopic
-                len := strsize(@buf)
-                if mqttTopicLen + len < MAX_LINE_LENGTH
-                    bytemove(@mqttTopicBuffer + mqttTopicLen, @buf, len)
-                    mqttTopicLen += len
-                    debug("MQTT topic byte received, len=", udec(len), " total=", udec(mqttTopicLen), "/", udec(mqttTopicExpected))
-                else
-                    debug("MQTT topic buffer overflow!")
-                    inMqttTopic := 0
-
-                if mqttTopicLen >= mqttTopicExpected
-                    inMqttTopic := 0
-                    debug("MQTT topic complete: ", zstr(@mqttTopicBuffer))
-
-            ' Handle incoming MQTT payload data
-            elseif inMqttPayload
-                ' Add this line's data to our payload buffer
-                len := strsize(@buf)                    ' Get length of this line
-                if mqttPayloadLen + len < MAX_RESPONSE
-                    bytemove(@mqttPayloadBuffer + mqttPayloadLen, @buf, len)
-                    mqttPayloadLen += len
-                    debug("MQTT payload byte received, len=", udec(len), " total=", udec(mqttPayloadLen), "/", udec(mqttPayloadExpected))
-                else
-                    debug("MQTT payload buffer overflow!")
-                    inMqttPayload := 0                  ' Reset on error
-
-                ' Check if we've received all expected data
-                if mqttPayloadLen >= mqttPayloadExpected
-                    debug("MQTT payload complete: ", udec(mqttPayloadLen), " bytes received")
-
+            
             ' response
             elseif strcomp(@buf, @inWaitingCommand)
                 inWaitingEchoed := true
@@ -642,25 +493,113 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 debug("Command completed with CMS ERROR")
                 ' read number value
                 lastCmsError := str.atoi(@buf+12)
+            elseif str.startswith(@buf, @"+CMQTTCONNECT: ")
+                addr := @buf + 15                       ' Skip "+CMQTTCONNECT: "
+                client := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    rc := str.atoi(addr)
+                else
+                    rc := 1              ' Error
+                BYTE[mqttClientConnected[client]] := rc
+                debug("MQTT Connect Result URC: client=", udec(client), " result=", udec(rc))
+            elseif str.startswith(@buf, @"+CMQTTSUB: ")
+                addr := @buf + 11                       ' Skip "+CMQTTSUB: "
+                client := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    rc := str.atoi(addr)
+                else
+                    rc := 1              ' Error
+                BYTE[mqttSubscriptionStatus[client]] := rc
+                debug("MQTT Sub Result URC: client=", udec(client), " result=", udec(rc))
+            elseif str.startswith(@buf, @"+CMQTTRXSTART: ")
+                addr := @buf + 15                       ' Skip "+CMQTTRXSTART: "
+                client := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    WORD[mqttTopicBytesRemaining[client]] := str.atoi(addr)
+                    debug("topic bytes rem", udec(str.atoi(addr)), udec(WORD[mqttTopicBytesRemaining[client]]))
+                    WORD[mqttTopicTotalBytes[client]] := WORD[mqttTopicBytesRemaining[client]]
+                    repeat while BYTE[addr] >= "0" and BYTE[addr] <= "9"
+                        addr++
+                    if BYTE[addr] == ","
+                        addr++
+                        WORD[mqttPayloadBytesRemaining[client]] := str.atoi(addr)
+                        WORD[mqttPayloadTotalBytes[client]] := WORD[mqttPayloadBytesRemaining[client]]
+                else
+                    WORD[mqttTopicBytesRemaining[client]] := 0
+                    WORD[mqttTopicTotalBytes[client]] := 0
+                    WORD[mqttPayloadBytesRemaining[client]] := 0
+                    WORD[mqttPayloadTotalBytes[client]] := 0
+                    DEBUG("WTF")
+                BYTE[mqttTopicReceiving[client]] := 1
+                BYTE[mqttPayloadReceiving[client]] := 0
+                debug("MQTT RX Start: client=", udec(client), " topicBytes=", udec(WORD[mqttTopicBytesRemaining[client]]), " payloadBytes=", udec(WORD[mqttPayloadBytesRemaining[client]]))
+            elseif str.startswith(@buf, @"+CMQTTRXTOPIC: ")
+                addr := @buf + 14                       ' Skip "+CMQTTRXTOPIC: "
+                client := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    ' topic data starts here
+                    BYTE[mqttTopicReceiving[client]] := 1       ' receiving topic data
+                else
+                    BYTE[mqttTopicReceiving[client]] := 0       ' no topic data
+            elseif str.startswith(@buf, @"+CMQTTRXPAYLOAD: ")
+                addr := @buf + 16                       ' Skip "+CMQTTRXPAYLOAD: "
+                client := str.atoi(addr)
+                repeat while BYTE[addr] <> "," and BYTE[addr] <> 0
+                    addr++
+                if BYTE[addr] == ","
+                    addr++
+                    ' payload data starts here
+                    BYTE[mqttPayloadReceiving[client]] := 1       ' receiving payload data
+                else
+                    BYTE[mqttPayloadReceiving[client]] := 0       ' no payload data
+            elseif BYTE[mqttTopicReceiving[0]] == 1 || BYTE[mqttTopicReceiving[1]] == 1
+                ' receiving topic data
+                client := BYTE[mqttTopicReceiving[0]] == 1 ? 0 : 1
+                if BYTE[inWaitingCompleted] <> 0      ' check if we have data in buffer
+                    ' copy data from buf to topic buffer at mqttMessageStackAddrs[client]
+                    i := 0
+                    repeat while i < WORD[mqttTopicBytesRemaining[client]] && BYTE[buf + i] <> 0 && BYTE[buf + i] <> 13 && BYTE[buf + i] <> 10
+                        BYTE[LONG[mqttMessageStackAddrs[client]] + i] := BYTE[buf + i]
+                        i++
+                    WORD[mqttTopicBytesRemaining[client]] := WORD[mqttTopicBytesRemaining[client]] - i
+                    if WORD[mqttTopicBytesRemaining[client]] == 0
+                        BYTE[mqttTopicReceiving[client]] := 0      ' topic reception complete
+                        BYTE[LONG[mqttMessageStackAddrs[client]] + i] := 0   ' null terminate
+                        debug("MQTT Topic: client=", udec(client), " len=", udec(i), " topic=", zstr(LONG[mqttMessageStackAddrs[client]]))
+            elseif BYTE[mqttPayloadReceiving[0]] == 1 || BYTE[mqttPayloadReceiving[1]] == 1
+                ' receiving payload data
+                client := BYTE[mqttPayloadReceiving[0]] == 1 ? 0 : 1
+                if BYTE[inWaitingCompleted] <> 0      ' check if we have data in buffer
+                    ' copy data from buf to payload buffer after the topic
+                    i := 0
+                    repeat while i < WORD[mqttPayloadBytesRemaining[client]] && BYTE[buf + i] <> 0 && BYTE[buf + i] <> 13 && BYTE[buf + i] <> 10
+                        BYTE[LONG[mqttMessageStackAddrs[client]] + WORD[mqttTopicBytesRemaining[client]] + i] := BYTE[buf + i]
+                        i++
+                    WORD[mqttPayloadBytesRemaining[client]] := WORD[mqttPayloadBytesRemaining[client]] - i
+                    if WORD[mqttPayloadBytesRemaining[client]] == 0
+                        BYTE[mqttPayloadReceiving[client]] := 0      ' payload reception complete
+                        BYTE[LONG[mqttMessageStackAddrs[client]] + WORD[mqttTopicBytesRemaining[client]] + i] := 0   ' null terminate
+                        inWaitingPayloadAddr := LONG[mqttMessageStackAddrs[client]]
+                        inWaitingPayloadLen := WORD[mqttTopicTotalBytes[client]] - WORD[mqttTopicBytesRemaining[client]] + WORD[mqttPayloadTotalBytes[client]] - WORD[mqttPayloadBytesRemaining[client]]
+                        debug("MQTT Payload: client=", udec(client), " topicLen=", udec(WORD[mqttTopicTotalBytes[client]] - WORD[mqttTopicBytesRemaining[client]]), " payloadLen=", udec(WORD[mqttPayloadTotalBytes[client]] - WORD[mqttPayloadBytesRemaining[client]]), " data=", zstr(LONG[mqttMessageStackAddrs[client]]))
+                        ' notify main cog that message is ready
+                        BYTE[mqttMessageWaiting[client]] := true
             elseif inWaitingCompleted == false
                 appendResponse(@buf)
             else
                 debug("ERR: Received unrecognized response: ", zstr(@buf))
-
-
-PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
-' Check if we have a payload/topic ready
-
-    ifnot mqttPayloadReady
-        r := RESULT_ERROR
-        return
-
-    ' Copy the topic data to the destination buffer
-    lenToCopy := mqttTopicLen <# maxLen                 ' Lesser of actual length or max allowed
-    bytemove(pDst, @mqttTopicBuffer, lenToCopy)
-    BYTE[pDst][lenToCopy] := 0                          ' Null terminate
-
-    r := RESULT_OK
 
 
 PUB mqttStart() : r
@@ -671,62 +610,72 @@ PUB mqttStop() : r
     r := runCommand(@"AT+CMQTTSTOP")
 
 
-PUB mqttAcquireClient(clientNum, pClientName) : r | tmp[128]
+PUB mqttAcquireClient(clientNum, pClientName, pMqttStack) : r | tmp[128]
+    LONG[mqttMessageStackAddrs[clientNum]] := pMqttStack
+    debug("MQTT client", udec(clientNum), "Stack location", udec(LONG[mqttMessageStackAddrs[clientNum]]), udec(pMqttStack))
     str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c\000", clientNum, 34, pClientName, 34)
     r := runCommand(@tmp)
 
+PUB mqttConnect(clientNum, pHostString, keepAlive, clean, pUsernameString, pPasswordString) : r | tmp[128]
+    if pUsernameString <> 0 && pPasswordString <> 0
+        str.sprintf12(@tmp, @"AT+CMQTTCONNECT=%d,%c%s%c,%d,%d,%c%s%c,%c%s%c\000", clientNum, 34, pHostString, 34, keepAlive, clean, 34, pUsernameString, 34, 34, pPasswordString, 34)
+    else
+        str.sprintf6(@tmp, @"AT+CMQTTCONNECT=%d,%c%s%c,%d,%d\000", clientNum, 34, pHostString, 34, keepAlive, clean)
+    r := runCommand(@tmp)
+
+PUB getMqttClientStatus(clientNum) : r
+    r := BYTE[mqttClientConnected[clientNum]]
+
+PUB getMqttSubscriptionStatus(clientNum) : r
+    r := BYTE[mqttSubscriptionStatus[clientNum]]
+
+PUB isMqttMessageWaiting(clientNum) : r
+    r := BYTE[mqttMessageWaiting[clientNum]]
+
+PUB getMqttTopic(clientNum, pBuffer, maxLen) : r | srcLen
+    ' Only return topic data if a message is waiting
+    if BYTE[mqttMessageWaiting[clientNum]]
+        srcLen := WORD[mqttTopicTotalBytes[clientNum]] - WORD[mqttTopicBytesRemaining[clientNum]]
+        ' Limit to buffer size
+        if srcLen > maxLen
+            srcLen := maxLen
+        strcopy(pBuffer, LONG[mqttMessageStackAddrs[clientNum]], srcLen)
+        r := RESULT_OK
+    else
+        r := RESULT_ERROR
+
+PUB getMqttPayload(clientNum, pBuffer, maxLen) : r | srcLen
+    ' Only return payload data if a message is waiting
+    if BYTE[mqttMessageWaiting[clientNum]]
+        srcLen := WORD[mqttPayloadTotalBytes[clientNum]] - WORD[mqttPayloadBytesRemaining[clientNum]]
+        ' Limit to buffer size
+        if srcLen > maxLen
+            srcLen := maxLen
+        strcopy(pBuffer, LONG[mqttMessageStackAddrs[clientNum]] + WORD[mqttTopicTotalBytes[clientNum]] - WORD[mqttTopicBytesRemaining[clientNum]], srcLen)
+        r := RESULT_OK
+    else
+        r := RESULT_ERROR
+
+PUB clearMqttMessage(clientNum)
+    BYTE[mqttMessageWaiting[clientNum]] := false
 
 PUB mqttWillTopic(clientNum, pWillTopic) : r | topicLen, tmp[64]
     topicLen := strsize(pWillTopic)
     str.sprintf2(@tmp, @"AT+CMQTTWILLTOPIC=%d,%d\000", clientNum, topicLen)
-    r := runCommandWithPayload(@tmp, pWillTopic, topicLen)
+    r := runCommandWithPayload(@tmp, pWillTopic)
 
 
 PUB mqttWillMsg(clientNum, pWillMsg, qos) : r | msgLen, tmp[64]
     msgLen := strsize(pWillMsg)
     str.sprintf3(@tmp, @"AT+CMQTTWILLMSG=%d,%d,%d\000", clientNum, msgLen, qos)
-    r := runCommandWithPayload(@tmp, pWillMsg, msgLen)
-
-
-PUB mqttConnect(clientNum, pAddress, keepAlive, cleanSession, pUsername, pPassword) : r | tmp[512], tmp2[128], args[6]
-    args[0] := clientNum
-    args[1] := 34
-    args[2] := pAddress
-    args[3] := 34
-    args[4] := keepAlive
-    args[5] := cleanSession
-    str.sprintf(@tmp, @"AT+CMQTTCONNECT=%d,%c%s%c,%d,%d\000", @args)
-
-    if pUsername <> 0 and strsize(pUsername) > 0
-        str.sprintf3(@tmp2, @",%c%s%c\000", 34, pUsername, 34)
-        str.append(@tmp, @tmp2)
-        if pPassword <> 0 and strsize(pPassword) > 0
-            str.sprintf3(@tmp2, @",%c%s%c\000", 34, pPassword, 34)
-            str.append(@tmp, @tmp2)
-
-    mqttConnectResult := $FF
-    r := runCommand(@tmp)
-    if r <> RESULT_OK
-        return r
-
-    ' Wait for the +CMQTTCONNECT: <client_index>,<err_code> URC
-    ' Wait up to 20 seconds (400 * 50ms)
-    repeat 400
-        if mqttConnectResult <> $FF
-            quit
-        waitms(50)
-
-    if mqttConnectResult == 0
-        r := RESULT_OK
-    else
-        r := RESULT_ERROR
-
+    r := runCommandWithPayload(@tmp, pWillMsg)
 
 PUB mqttSubscribe(clientNum, pTopic, qos) : r | topicLen, tmp[64]
+    BYTE[mqttSubscriptionStatus[clientNum]] := 255
     topicLen := strsize(pTopic)
     ' 1. Set subscription topic (which expects a prompt and payload)
     str.sprintf3(@tmp, @"AT+CMQTTSUBTOPIC=%d,%d,%d\000", clientNum, topicLen, qos)
-    r := runCommandWithPayload(@tmp, pTopic, topicLen)
+    r := runCommandWithPayload(@tmp, pTopic)
     if r <> RESULT_OK
         return r
 
@@ -762,3 +711,29 @@ PUB netOpen() : r
 
 PUB netClose() : r
     r := runCommand(@"AT+NETCLOSE")
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}
