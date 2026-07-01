@@ -59,6 +59,7 @@ Useful documentation for the SIM7600
 * [SIMCOM Product Page](https://www.simcom.com/product/SIM7600X.html)
 * [Waveshare Module Wiki](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
 * [Waveshare Module Schematic](https://www.waveshare.com/w/upload/8/89/SIM7600X_4G_Module.pdf)
+* [MQTT(S) Application Note](https://files.waveshare.com/upload/5/50/SIM7500_SIM7600_SIM7800_Series_MQTT_Application_Note_V2.00.pdf)
 
 ## Development
 
