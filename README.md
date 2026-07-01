@@ -11,11 +11,15 @@ The driver is tested in [FlexSpin 7.6.7](https://github.com/totalspectrum/flexpr
     I used a [Waveshare SIM7600G-H development module](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
     <br>
     They are available from [Amazon](https://www.waveshare.com/wiki/SIM7600X_4G_Module) and include a MAIN antenna. (GPS and AUX antenna not included)
+    Note that some modules use an SMA connector instead of IPEX 1.
 
 * [P2 Edge](https://www.parallax.com/product/p2-edge-module/)
 * Any of the P2 Edge breakouts work for testing. I used the [P2 Edge Module Breadboard](https://www.parallax.com/product/p2-edge-module-breadboard/).
 * [PropPlug](https://www.parallax.com/product/prop-plug/)
 * I also soldered a perfboard and female headers, as the module is too wide for the breadboard.
+
+> [!TIP]
+> The SIM7600 can cause large transient current spikes (>2A) when transmitting data. Use a stable supply for stability. The Waveshare module includes a MIC29302 LDO configured for 3.88V.
 
 ## Carrier
 
@@ -47,6 +51,14 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [ ] GPS/GNSS
 * [ ] Raw TCP
 * [ ] Raw UDP
+
+## Resources
+
+Useful documentation for the SIM7600
+
+* [SIMCOM Product Page](https://www.simcom.com/product/SIM7600X.html)
+* [Waveshare Module Wiki](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
+* [Waveshare Module Schematic](https://www.waveshare.com/w/upload/8/89/SIM7600X_4G_Module.pdf)
 
 ## License
 

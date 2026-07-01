@@ -1,140 +1,159 @@
 {
-    "spin2.localIncludes": {
-        ".": {
-            "auto": false,
-            "dirs": [
-                "/"
-            ]
-        },
-        "demos/01.modem_info": {
-            "auto": false,
-            "dirs": [
-                "../../",
-                "../"
-            ]
-        }
-    },
-    "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
-    "spin2.fNameTopLevel": "06_mqtt_publish.spin2",
-    "spin2.optionsBinaryFname": "06_mqtt_publish.binary",
-    "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
-    "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin",
-    "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
-    "spinExtension.toolchain.optionsCompile.enableDebug": true,
-    "actionButtons": {
-        "reloadButton":"$(debug-gripper)", // Custom reload button text or icon (default ↻). null value enables automatic reload on configuration change
-        "commands": [
-            {
-               "name": "$(tools) Compile",
-               "color": "orange",
-               "useVsCodeApi": true,
-               "command": "workbench.action.tasks.runTask",
-               "args": ["compileP2"]
-            },
-            {
-               "name": "$(verified) Compile Top",
-               "color": "orange",
-               "useVsCodeApi": true,
-               "command": "workbench.action.tasks.runTask",
-               "args": ["compileTopP2"]
-            },
-            {
-               "name": "$(download) Download",
-               "color": "orange",
-               "useVsCodeApi": true,
-               "command": "workbench.action.tasks.runTask",
-               "args": ["downloadP2"]
-            },{
-            "name": "$(stop) Stop Download",
-            "color": "red",
-            "useVsCodeApi": true,
-            "command": "workbench.action.tasks.terminate",
-            "args": ["downloadP2"]
-            }
-        ]
-    },
-    "files.exclude": {
-        "**/.git": true,
-        "**/.svn": true,
-        "**/.hg": true,
-        "**/.DS_Store": true,
-        "**/Thumbs.db": true,
-        "**/*.binary": true,
-        "**/*.p2asm": true,
-    },
-    "spinExtension.ClientBehavior.colorEditorBackground": true,
-    "spinExtension.ClientBehavior.editorBackgroundAlpha": 10,
-    "spinExtension.elasticTabstops.enable": true,
-    "spinExtension.elasticTabstops.choice": "IronSheep",
-    "spinExtension.toolchain.optionsDownload.enableFlash": true,
-    "spin2.optionsLoader": [
-        "-t",
-        "-b2000000",
-        "-SINGLE",
-        "-FIFO",
-        "8192",
-        "-FLASH",
-        "-p/dev/ttyUSB0"
-    ],
-    "spin2.optionsBuild": [
-        "-2",
-        "-Wabs-paths",
-        "-Wmax-errors=99",
-        "--charset=parallax",
-        "--sizes",
-        "-gbrk",
-        "--compress",
-        "-I",
+  "spin2.localIncludes": {
+    ".": {
+      "auto": false,
+      "dirs": [
         "/"
-    ],
-    "vscode-serial-monitor.customBaudRates": [
-        1000000,
-        2000000,
-        921600
-    ],
-    "spinExtension.ServerBehavior.highlightFlexspinDirectives": true,
-    "spinExtension.toolchain.advanced.enable": true,
-    "spinExtension.toolchain.optionsCompile.enableLstOutput": false,
-    "spinExtension.toolchain.optionsDownload.enterTerminalAfter": "only when debug() compile enabled",
-    "spinExtension.toolchain.optionsDownload.user.baudrate": 2000000,
-    "cSpell.words": [
-        "atoi",
-        "bytemove",
-        "CGMI",
-        "CGMM",
-        "CGSN",
-        "CLKFREQ",
-        "cogspin",
-        "cogstop",
-        "CPIN",
-        "fullduplexserial",
-        "IPREX",
-        "longfill",
-        "lstr",
-        "mqtt",
-        "newcog",
-        "nstr",
-        "perfboard",
-        "phonebook",
-        "pinh",
-        "plmn",
-        "putc",
-        "rssi",
-        "rxcheck",
-        "sdec",
-        "SIMCOM",
-        "sprintf",
-        "startswith",
-        "strcomp",
-        "strcopy",
-        "strsize",
-        "TDSCDMA",
-        "udec",
-        "urcs",
-        "waitct",
-        "waitms",
-        "WCDMA",
-        "zstr"
-    ],
-    "spin2.serialPort": "/dev/ttyUSB0",
+      ]
+    },
+    "demos/01.modem_info": {
+      "auto": false,
+      "dirs": [
+        "../../",
+        "../"
+      ]
+    }
+  },
+  "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
+  "spin2.fNameTopLevel": "06_mqtt_publish.spin2",
+  "spin2.optionsBinaryFname": "06_mqtt_publish.binary",
+  "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
+  "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
+  "spinExtension.toolchain.optionsCompile.enableDebug": true,
+  "actionButtons": {
+    "reloadButton": "$(debug-gripper)",
+    "commands": [
+      {
+        "name": "$(tools) Compile",
+        "color": "orange",
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.runTask",
+        "args": [
+          "compileP2"
+        ]
+      },
+      {
+        "name": "$(verified) Compile Top",
+        "color": "orange",
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.runTask",
+        "args": [
+          "compileTopP2"
+        ]
+      },
+      {
+        "name": "$(download) Download",
+        "color": "orange",
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.runTask",
+        "args": [
+          "downloadP2"
+        ]
+      },
+      {
+        "name": "$(stop) Stop Download",
+        "color": "red",
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.terminate",
+        "args": [
+          "downloadP2"
+        ]
+      },
+      {
+        "name": "$(fold-up) Set Top Level",
+        "color": "magenta",
+        "command": "bash .vscode/update-tl.bash \"${file}\"",
+        "saveAll": true
+      }
+    ]
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/*.binary": true,
+    "**/*.p2asm": true
+  },
+  "spinExtension.ClientBehavior.colorEditorBackground": true,
+  "spinExtension.ClientBehavior.editorBackgroundAlpha": 10,
+  "spinExtension.elasticTabstops.enable": true,
+  "spinExtension.elasticTabstops.choice": "IronSheep",
+  "spinExtension.toolchain.optionsDownload.enableFlash": true,
+  "spin2.optionsLoader": [
+    "-t",
+    "-b2000000",
+    "-SINGLE",
+    "-FIFO",
+    "8192",
+    "-FLASH",
+    "-p/dev/ttyUSB0"
+],
+  "spin2.optionsBuild": [
+    "-2",
+    "-Wabs-paths",
+    "-Wmax-errors=99",
+    "--charset=parallax",
+    "--sizes",
+    "-gbrk",
+    "--compress",
+    "-I",
+    "/"
+],
+  "vscode-serial-monitor.customBaudRates": [
+    1000000,
+    2000000,
+    921600
+  ],
+  "spinExtension.ServerBehavior.highlightFlexspinDirectives": true,
+  "spinExtension.toolchain.advanced.enable": true,
+  "spinExtension.toolchain.optionsCompile.enableLstOutput": false,
+  "spinExtension.toolchain.optionsDownload.enterTerminalAfter": "only when debug() compile enabled",
+  "spinExtension.toolchain.optionsDownload.user.baudrate": 2000000,
+  "cSpell.words": [
+    "atoi",
+    "bytemove",
+    "CGMI",
+    "CGMM",
+    "CGSN",
+    "CLKFREQ",
+    "cogspin",
+    "cogstop",
+    "CPIN",
+    "fullduplexserial",
+    "IPEX",
+    "IPREX",
+    "JonnyMac",
+    "longfill",
+    "lstr",
+    "McPhalen",
+    "mqtt",
+    "newcog",
+    "nstr",
+    "perfboard",
+    "phonebook",
+    "pinh",
+    "plmn",
+    "putc",
+    "rssi",
+    "rxcheck",
+    "sdec",
+    "SIMCOM",
+    "sprintf",
+    "startswith",
+    "strcomp",
+    "strcopy",
+    "strsize",
+    "TDSCDMA",
+    "udec",
+    "urcs",
+    "waitct",
+    "waitms",
+    "Waveshare",
+    "WCDMA",
+    "zstr"
+],
+  "spin2.serialPort": "/dev/ttyUSB0",
+  "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin"
 }
