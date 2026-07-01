@@ -2,7 +2,7 @@
 
 SIMCOM SIM7600 Driver for a P2 running in a dedicated cog. The module supports 2G/3G/4G Networking.
 
-The driver is tested in [FlexSpin 7.6.7](https://github.com/totalspectrum/flexprop/releases/tag/v7.6.7)
+The driver is tested in [FlexSpin 7.6.11](https://github.com/totalspectrum/flexprop/releases/tag/v7.6.11)
 
 ## Test Hardware
 
