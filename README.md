@@ -60,6 +60,11 @@ Useful documentation for the SIM7600
 * [Waveshare Module Wiki](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
 * [Waveshare Module Schematic](https://www.waveshare.com/w/upload/8/89/SIM7600X_4G_Module.pdf)
 
+## Development
+
+This driver is tested using [FlexSpin](https://github.com/totalspectrum/flexprop/). It should still work in PNut.
+The project is configured for development in VSCode using the [Spin2 LanguageServer extension](https://marketplace.visualstudio.com/items?itemName=IronSheepProductionsLLC.spin2)
+
 ## License
 
 All work is under the MIT license.

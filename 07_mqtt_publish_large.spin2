@@ -2,13 +2,14 @@
 
 '' =================================================================================================
 ''
-''   File....... 06_mqtt_publish.spin2
-''   Purpose.... MQTT Publisher Client Example for SIM7600 Modem
+''   File....... 07_mqtt_publish_large.spin2
+''   Purpose.... MQTT Publisher Client Example for SIM7600 Modem (Streaming Large Payloads)
 ''   Authors.... Kevin Ahr
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 28 JUN 2026
 ''   Updated.... 01 JUL 2026
+''   WARNING.... This example consumes a lot of data and may incur costs on your cellular plan. Use with caution.
 ''
 '' =================================================================================================
 
@@ -25,12 +26,14 @@ CON
 
     RX_BUFFER_SIZE   = 4096
     URC_BUFFER_SIZE  = 4096
+    PAYLOAD_SIZE     = 10240                                        ' 10240 bytes for demo, absolute maximum supported payload by the SIM7600 firmware
 
 OBJ
 
     modem       : "ka_sim7600"
     secrets     : "00_secrets"
     str         : "string"
+    prng        : "jm_prng"
 
 VAR
 
@@ -38,7 +41,7 @@ VAR
     BYTE    rxBuffer[RX_BUFFER_SIZE]
     BYTE    urcBuffer[URC_BUFFER_SIZE]
 
-PUB main() | status, i, byte payload[4]
+PUB main() | status, i, j, bytesSent, byteVal, charByte, result
     modem.start(RX, TX, DTR, RST, 115_200, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' leds off
@@ -112,21 +115,48 @@ PUB main() | status, i, byte payload[4]
 
     i := 0
     repeat
-        ' Publish to Topic
-        str.sprintf1(@payload, @"%d\000", i)
-        status := modem.mqttPublish(0, string("propeller2/pubdemo"), 0, 0, 60, @payload)
-        debug("mqttPublish: ", sdec(status))
+        debug("Starting transmission #", sdec(i))
+
+        ' Start MQTT publish stream
+        status := modem.startMqttPublishStream(0, string("propeller2/publargedemo"), 0, 0, 60, PAYLOAD_SIZE)
         if status <> modem.RESULT_OK
-            debug("Failed to publish to topic")
+            debug("startMqttPublishStream failed: ", sdec(status))
+            waitms(2000)
+            i++
+            next
+
+        ' Send the payload data using streaming
+        bytesSent := 0
+        repeat PAYLOAD_SIZE
+            ' Generate a random byte (0-255) and map to 'A'-'Z'
+            byteVal := prng.xrandomize(0, 255)
+            charByte := ((byteVal // 26) + "A")
+
+            ' Send the byte via stream - retry if buffer full
             repeat
-                waitct(1)
+                debug(udec(charByte))
+                result := modem.mqttPublishStreamByte(charByte)
+                debug(udec(result))
+                if result >= 0
+                    bytesSent++
+                    quit
+                else
+                    ' Buffer full - wait and try again
+                    waitms(10)
+
+        ' Check if all bytes were sent
+        if bytesSent == PAYLOAD_SIZE
+            debug("Successfully sent ", sdec(PAYLOAD_SIZE), " bytes via stream")
+            modem.mqttPublishStreamDone()
+        else
+            debug("Only sent ", sdec(bytesSent), " of ", sdec(PAYLOAD_SIZE), " bytes")
+
         i++
-        waitms(2000)
+        waitms(5000)
 
 CON { license }
 
 {{
-
   Terms of Use: MIT License
 
   Permission is hereby granted, free of charge, to any person obtaining a copy

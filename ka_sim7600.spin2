@@ -12,8 +12,9 @@
 
 CON
 
-    MAX_LINE_LENGTH  = 1024
-    MAX_RESPONSE     = 8192
+    MAX_LINE_LENGTH   = 1024
+    MAX_RESPONSE      = 8192
+    PAYLOAD_BUF_SIZE  = 32
 
 CON
 
@@ -41,6 +42,12 @@ VAR
     BYTE    cogId
     BYTE    driverState
 
+    ' Payload ring buffer (replaces simple_ring_buffer object)
+    LONG    payload_ring_ptr                                        ' pointer to byte array
+    LONG    payload_ring_mask                                       ' size-1 for fast wrapping
+    LONG    payload_head                                            ' write position
+    LONG    payload_tail                                            ' read position
+
     BYTE    inWaitingCommand[MAX_LINE_LENGTH]
     BYTE    inWaitingEchoed
     BYTE    inWaitingCompleted
@@ -50,11 +57,16 @@ VAR
 
     WORD    lastCmeError, lastCmsError
 
-    BYTE    modemStack[MAX_LINE_LENGTH + 200]
+    BYTE    modemStack[MAX_LINE_LENGTH + 256]
 
     BYTE    doInitialReset
 
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
+
+' Payload streaming
+    BYTE    payloadBuffer[PAYLOAD_BUF_SIZE]
+    LONG    inWaitingPayloadLen                                     ' Total expected bytes (for progress)
+    LONG    payloadSent                                             ' How many bytes already sent
 
     BYTE    mqttClientNum
     WORD    mqttPayloadExpected
@@ -68,8 +80,17 @@ VAR
     BYTE    inMqttTopic
     BYTE    mqttTopicBuffer[MAX_LINE_LENGTH]
 
-    LONG    inWaitingPayloadAddr
-    LONG    inWaitingPayloadLen
+    ' MQTT Publish Streaming
+    BYTE    mqttPublishClientNum
+    WORD    mqttPublishTopicLen
+    WORD    mqttPublishPayloadLen
+    WORD    mqttPublishPayloadSent
+    BYTE    mqttPublishQos
+    BYTE    mqttPublishRetain
+    WORD    mqttPublishTimeout
+    BYTE    mqttPublishTopicSet
+    BYTE    mqttPublishLenSet
+
     BYTE    inWaitingForPrompt
 
     BYTE    mqttStartResult
@@ -104,12 +125,15 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset, pRxBuffer, rxBufferSize, 
     mqttPayloadReady := 0
     bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
 
+    payload_init(@payloadBuffer, PAYLOAD_BUF_SIZE)
+    inWaitingPayloadLen := 0
+    payloadSent := 0
+
     mqttTopicLen := 0
     mqttTopicExpected := 0
     inMqttTopic := 0
     bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
 
-    inWaitingPayloadAddr := 0
     inWaitingPayloadLen := 0
     inWaitingForPrompt := false
     mqttConnectResult := $FF
@@ -121,6 +145,7 @@ PUB stop()
 
     ser.stop()
     cogstop(cogId)
+
 
 PUB hardReset()
 
@@ -158,8 +183,10 @@ PUB getInWaitingUrcType() : r
     else
         r := URC_NONE                                   ' Shouldn't happen if we only put MQTT URCs in buffer
 
+
 PUB popInWaitingUrc()
     fifoUrc.ringBufferDrop()
+
 
 PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
 ' Check if we have a payload ready (i.e., we have received the END URC for a buffered PAYSTART)
@@ -408,13 +435,43 @@ PRI runCommand(p_cmdStr) : r
     r := getCommandResult()
 
 
-PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r
-    inWaitingPayloadAddr := p_payload
+PRI runBlindCommandForPrompt(p_cmdStr)
+    sendCommand(p_cmdStr)
+    repeat while (inWaitingForPrompt == true) or (inWaitingEchoed == false)
+
+
+PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r | i
+'' Send command + payload. p_payload can be small buffer or streamed later.
+
     inWaitingPayloadLen := payloadLen
+    payloadSent := 0
+    payload_flush()
+
+    ' If small payload, preload into ring buffer
+    if payloadLen <= PAYLOAD_BUF_SIZE
+        repeat i from 0 to payloadLen-1
+            payload_put(BYTE[p_payload][i])
+    else
+        ' Large payload: user must call feedPayload() before prompt arrives
+        debug("Large payload: use feedPayload()")
+
     inWaitingForPrompt := true
     sendCommand(p_cmdStr)
     repeat while isCommandRunning()
     r := getCommandResult()
+
+' New helper for large/streaming payloads
+PUB feedPayload(p_data, len) : sent
+'' Feed data into the payload stream (call repeatedly for large files)
+
+    sent := 0
+    repeat len
+        if payload_put(BYTE[p_data][sent])
+            sent++
+        else
+            ' Buffer full - caller should wait a bit
+            quit
+    return sent
 
 
 PRI runCommandAndGetResponse(p_cmdStr, p_resp, maxLen) : r
@@ -478,12 +535,12 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                     quit
                 10, 13:
                     fifoRx.ringBufferCommit()
+                    quit                                ' quit to handle echo in case ">" is the next char
                 ">":
                     if inWaitingForPrompt
                         inWaitingForPrompt := false
-                        if inWaitingPayloadAddr <> 0 and inWaitingPayloadLen > 0
-                            repeat i from 0 to inWaitingPayloadLen - 1
-                                ser.tx(BYTE[inWaitingPayloadAddr][i])
+                        debug(udec(inWaitingEchoed))
+                        streamPayloadToModem()
                     else
                         fifoRx.ringBufferPut(inChar)
                 other:
@@ -612,7 +669,7 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 if inWaitingEchoed
                     commandResultCode := RESULT_OK
                     inWaitingCompleted := true
-                    debug("Command completed with OK")
+                    debug("Command completed with OK", zstr(@inWaitingCommand))
                 else
                     debug("Received OK without command echo, ignoring")
             elseif strcomp(@buf, @"ERROR")
@@ -640,6 +697,56 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 debug("ERR: Received unrecognized response: ", zstr(@buf))
 
 
+PRI streamPayloadToModem() | c
+'' Stream payload from ring buffer to modem when > prompt received
+
+    payloadSent := 0
+    debug("Streaming payload to modem, total bytes: ", udec(inWaitingPayloadLen))
+    repeat while (payload_available() > 0) or (payloadSent < inWaitingPayloadLen)
+        c := payload_get()
+        if c == -1
+            next
+        ser.tx(c)
+        payloadSent++
+
+    debug("Payload streamed: ", udec(payloadSent), " / ", udec(inWaitingPayloadLen))
+
+
+PRI payload_init(pRing, size) | i
+    payload_ring_ptr := pRing
+    payload_ring_mask := size - 1
+    payload_head := 0
+    payload_tail := 0
+    bytefill(payload_ring_ptr, 0, size)
+
+
+PRI payload_put(c) : ok
+    if ((payload_head + 1) & payload_ring_mask) == payload_tail
+        return false
+
+    BYTE[payload_ring_ptr][payload_head] := c
+    payload_head := (payload_head + 1) & payload_ring_mask
+    ok := true
+
+
+PRI payload_get() : b
+    if (payload_head == payload_tail)
+        return -1
+
+    b := BYTE[payload_ring_ptr][payload_tail]
+    payload_tail := (payload_tail + 1) & payload_ring_mask
+    return b
+
+
+PRI payload_available() : c
+    c := (payload_head - payload_tail) & payload_ring_mask
+
+
+PRI payload_flush()
+    payload_head := 0
+    payload_tail := 0
+
+
 PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
 ' Check if we have a payload/topic ready
 
@@ -657,7 +764,7 @@ PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
 
 PUB mqttStart() : r
     r := runCommand(@"AT+CMQTTSTART")
-    if r <> 0 
+    if r <> 0
         return r
     repeat while mqttStartResult == 255
     r := mqttStartResult
@@ -730,10 +837,11 @@ PUB mqttSubscribe(clientNum, pTopic, qos) : r | topicLen, tmp[64]
     str.sprintf1(@tmp, @"AT+CMQTTSUB=%d\000", clientNum)
     r := runCommand(@tmp)
 
+
 PUB mqttPublish(clientNum, pTopic, qos, retain, timeout, pPayload) : r | topicLen, payloadLen, tmp[128] ' 128 limits you to a 111-byte topic and 108-byte payload. Module hard limits are 1024/10240 respectively.
     topicLen := strsize(pTopic)
     payloadLen := strsize(pPayload)
-    
+
     str.sprintf2(@tmp, @"AT+CMQTTTOPIC=%d,%d\000", clientNum, topicLen)
     r := runCommandWithPayload(@tmp, pTopic, topicLen)
     if r <> RESULT_OK
@@ -746,6 +854,106 @@ PUB mqttPublish(clientNum, pTopic, qos, retain, timeout, pPayload) : r | topicLe
 
     str.sprintf4(@tmp, @"AT+CMQTTPUB=%d,%d,%d,%d\000", clientNum, qos, timeout, retain)
     r := runCommand(@tmp)
+
+
+PUB startMqttPublishStream(clientNum, pTopic, qos, retain, timeout, length) : r | topicLen, tmp[128] ' 128 limits you to a 111-byte topic. Module hard limit is 1024.
+'' Start an MQTT publish stream for sending large payloads
+'' clientNum: MQTT client identifier
+'' pTopic: Topic string to publish to
+'' qos: Quality of Service (0, 1, or 2)
+'' retain: Retain flag (0 or 1)
+'' timeout: Timeout in seconds
+'' length: Total payload length in bytes
+
+    mqttPublishClientNum := clientNum
+    mqttPublishQos := qos
+    mqttPublishRetain := retain
+    mqttPublishTimeout := timeout
+    mqttPublishPayloadLen := length
+    mqttPublishPayloadSent := 0
+    mqttPublishTopicSet := false
+    mqttPublishLenSet := false
+
+    ' Set the topic first
+    topicLen := strsize(pTopic)
+    str.sprintf2(@tmp, @"AT+CMQTTTOPIC=%d,%d\000", clientNum, topicLen)
+    r := runCommandWithPayload(@tmp, pTopic, topicLen)
+    if r <> RESULT_OK
+        return r
+    mqttPublishTopicSet := true
+
+    ' Set the payload length
+    str.sprintf2(@tmp, @"AT+CMQTTPAYLOAD=%d,%d\000", clientNum, length)
+    inWaitingForPrompt := true
+    inWaitingPayloadLen := length
+    payloadSent := 0
+    payload_flush()
+    r := runBlindCommandForPrompt(@tmp)
+    mqttPublishLenSet := true
+
+    r := RESULT_OK
+
+
+PUB mqttPublishStreamDone() : r | tmp[64]
+'' Complete the MQTT publish stream and send the publish command
+
+    repeat while inWaitingCompleted == false
+    str.sprintf4(@tmp, @"AT+CMQTTPUB=%d,%d,%d,%d\000", mqttPublishClientNum, mqttPublishQos, mqttPublishTimeout, mqttPublishRetain)
+    r := runCommand(@tmp)
+
+
+PUB mqttPublishStreamByte(byteValue) : remaining | r
+'' Send a single byte in the MQTT publish stream
+'' Returns number of bytes remaining to send (including this one), or -1 on error
+
+    ifnot mqttPublishTopicSet
+        return -1
+    ifnot mqttPublishLenSet
+        return -1
+
+    ' Check if we've sent all bytes
+    if mqttPublishPayloadSent >= mqttPublishPayloadLen
+        return 0
+
+    ' Send the byte via the payload stream mechanism
+    ' We reuse the existing payload buffer and feedPayload mechanism
+    if payload_put(byteValue)
+        mqttPublishPayloadSent++
+        return mqttPublishPayloadLen - mqttPublishPayloadSent
+    else
+        ' Buffer full - caller should wait and try again
+        debug("full")
+        return -1
+
+
+PUB mqttPublishStreamStr(pStr) : remaining | len, i, success
+'' Send a string in the MQTT publish stream
+'' Returns number of bytes remaining to send (including this string), or -1 on error
+
+    ifnot mqttPublishTopicSet
+        return -1
+    ifnot mqttPublishLenSet
+        return -1
+
+    len := strsize(pStr)
+    if mqttPublishPayloadSent + len > mqttPublishPayloadLen
+        ' Truncate to fit remaining space
+        len := mqttPublishPayloadLen - mqttPublishPayloadSent
+        if len <= 0
+            return 0
+
+    ' Send each character
+    repeat i from 0 to len-1
+        success := payload_put(BYTE[pStr][i])
+        if success
+            mqttPublishPayloadSent++
+        else
+            ' Buffer full - return how many bytes we still need to send (including current)
+            return (mqttPublishPayloadLen - mqttPublishPayloadSent) + (len - i)
+    repeat
+
+    return mqttPublishPayloadLen - mqttPublishPayloadSent
+
 
 PUB mqttDisconnect(clientNum, timeout) : r | tmp[64]
     str.sprintf2(@tmp, @"AT+CMQTTDISC=%d,%d\000", clientNum, timeout)
