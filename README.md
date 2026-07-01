@@ -75,5 +75,7 @@ This project includes the following community objects:
 | ------------------------- | -------------------------- | ------- |
 | jm_ansi.spin2             | Jon "JonnyMac" McPhalen    | MIT     |
 | jm_nstr.spin2             | Jon "JonnyMac" McPhalen    | MIT     |
+| jm_prng.spin2             | Jon "JonnyMac" McPhalen    | MIT     |
+| jm_dhtxx.spin2            | Jon "JonnyMac" McPhalen    | MIT     |
 | jm_fullduplexserial.spin2 | Jon "JonnyMac" McPhalen    | MIT     |
 | string.spin2              | Jesse Burt                 | MIT     |

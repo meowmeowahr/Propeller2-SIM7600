@@ -1,0 +1,161 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 99_mqtt_dht.spin2
+''   Purpose.... MQTT Publisher Client Example for SIM7600 Modem using DHT11/22 sensor data
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 01 JUN 2026
+''   Updated.... 01 JUL 2026
+''
+'' =================================================================================================
+
+CON
+
+    _CLKFREQ  = 200_000_000
+
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+    DHT_PIN   = 4
+    DHT_TYPE  = 22
+
+CON
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
+OBJ
+
+    modem       : "ka_sim7600"
+    dht         : "jm_dhtxx"
+
+    secrets     : "00_secrets"
+    nstr        : "jm_nstr"
+
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
+PUB main() | status, i, byte payload[4]
+    modem.start(RX, TX, DTR, RST, 115_200, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    dht.start(DHT_PIN, DHT_TYPE, 0)
+
+    ' leds off
+    pinl(56)
+    pinl(57)
+
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        debug("Modem starting...")
+        if modem.isReady()
+            debug("Modem ready!")
+            quit
+
+    ' Configure APN
+    status := modem.definePdpContext(1, string("hologram"))
+    debug("definePdpContext: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set APN")
+        repeat
+            waitct(1)
+
+    ' Open Network
+    status := modem.netOpen()
+    debug("netOpen: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to open network")
+        repeat
+            waitct(1)
+
+    ' Start MQTT Service
+    status := modem.mqttStart()
+    debug("mqttStart: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to start MQTT service")
+        repeat
+            waitct(1)
+
+    ' acquire client 0
+    status := modem.mqttAcquireClient(0, string("p2_sim7600_client"))
+    debug("mqttAcquireClient: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to acquire client")
+        repeat
+            waitct(1)
+
+    ' will topic
+    status := modem.mqttWillTopic(0, string("p2_sim7600_client/will"))
+    debug("mqttWillTopic: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will topic")
+        repeat
+            waitct(1)
+
+    ' will msg
+    status := modem.mqttWillMsg(0, string("offline"), 1)
+    debug("mqttWillMsg: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will msg")
+        repeat
+            waitct(1)
+
+    ' connect
+    ' REPLACE THE MQTT ADDRESS WITH YOUR OWN SERVER
+    status := modem.mqttConnect(0, string("tcp://emqx.kevinbot.net:1883"), 60, 1, secrets.mqttUsername(), secrets.mqttPassword())
+    debug("mqttConnect: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to connect to broker")
+        repeat
+            waitct(1)
+
+    repeat
+        ' Publish temp
+        status := modem.mqttPublish(0, string("propeller2/temperature"), 0, 0, 60, nstr.dpdec(dht.read_tempc(), 1))
+        debug("mqttPublish: ", sdec(status))
+        if status <> modem.RESULT_OK
+            debug("Failed to publish to topic")
+            repeat
+                waitct(1)
+
+        ' Publish humidity
+        status := modem.mqttPublish(0, string("propeller2/humidity"), 0, 0, 60, nstr.dpdec(dht.read_humidity(), 1))
+        debug("mqttPublish: ", sdec(status))
+        if status <> modem.RESULT_OK
+            debug("Failed to publish to topic")
+            repeat
+                waitct(1)
+        waitms(2000)
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}
