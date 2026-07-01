@@ -888,7 +888,7 @@ PUB startMqttPublishStream(clientNum, pTopic, qos, retain, timeout, length) : r 
     inWaitingPayloadLen := length
     payloadSent := 0
     payload_flush()
-    r := runBlindCommandForPrompt(@tmp)
+    runBlindCommandForPrompt(@tmp)
     mqttPublishLenSet := true
 
     r := RESULT_OK
