@@ -72,6 +72,7 @@ VAR
     LONG    inWaitingPayloadLen
     BYTE    inWaitingForPrompt
 
+    BYTE    mqttStartResult
     WORD    mqttConnectResult
 
 PUB null()
@@ -112,6 +113,8 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset, pRxBuffer, rxBufferSize, 
     inWaitingPayloadLen := 0
     inWaitingForPrompt := false
     mqttConnectResult := $FF
+
+    mqttStartResult := 255
 
 
 PUB stop()
@@ -198,7 +201,7 @@ PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
 
 
 PUB isReady() : ready
-    ready := modemIsReady
+    ready := modemIsReady && smsIsReady && simIsReady
 
 
 PUB getModemFirmwareRevision(p_resp, maxLen) : r
@@ -486,7 +489,7 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 other:
                     fifoRx.ringBufferPut(inChar)
 
-        if fifoRx.ringBufferCount() > 0
+        repeat while fifoRx.ringBufferCount() > 0
             fifoRx.ringBufferReadStr(@buf, MAX_LINE_LENGTH)
             debug("RX: ", zstr(@buf))
 
@@ -505,6 +508,9 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
                 simIsReady := true
                 debug("SIM subsystem marked as ready")
             ' MQTT URCs - buffer for later processing
+            elseif str.startswith(@buf, @"+CMQTTSTART: ")
+                debug("MQTT RX Start URC: ", zstr(@buf))
+                mqttStartResult := str.atoi(@buf + 14)
             elseif str.startswith(@buf, @"+CMQTTRXSTART: ")
                 debug("MQTT RX Start URC: ", zstr(@buf))
             elseif str.startswith(@buf, @"+CMQTTRXTOPIC: ")
@@ -651,6 +657,10 @@ PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
 
 PUB mqttStart() : r
     r := runCommand(@"AT+CMQTTSTART")
+    if r <> 0 
+        return r
+    repeat while mqttStartResult == 255
+    r := mqttStartResult
 
 
 PUB mqttStop() : r
@@ -720,6 +730,22 @@ PUB mqttSubscribe(clientNum, pTopic, qos) : r | topicLen, tmp[64]
     str.sprintf1(@tmp, @"AT+CMQTTSUB=%d\000", clientNum)
     r := runCommand(@tmp)
 
+PUB mqttPublish(clientNum, pTopic, qos, retain, timeout, pPayload) : r | topicLen, payloadLen, tmp[128] ' 128 limits you to a 111-byte topic and 108-byte payload. Module hard limits are 1024/10240 respectively.
+    topicLen := strsize(pTopic)
+    payloadLen := strsize(pPayload)
+    
+    str.sprintf2(@tmp, @"AT+CMQTTTOPIC=%d,%d\000", clientNum, topicLen)
+    r := runCommandWithPayload(@tmp, pTopic, topicLen)
+    if r <> RESULT_OK
+        return r
+
+    str.sprintf2(@tmp, @"AT+CMQTTPAYLOAD=%d,%d\000", clientNum, payloadLen)
+    r := runCommandWithPayload(@tmp, pPayload, payloadLen)
+    if r <> RESULT_OK
+        return r
+
+    str.sprintf4(@tmp, @"AT+CMQTTPUB=%d,%d,%d,%d\000", clientNum, qos, timeout, retain)
+    r := runCommand(@tmp)
 
 PUB mqttDisconnect(clientNum, timeout) : r | tmp[64]
     str.sprintf2(@tmp, @"AT+CMQTTDISC=%d,%d\000", clientNum, timeout)

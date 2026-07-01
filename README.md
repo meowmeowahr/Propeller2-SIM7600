@@ -32,7 +32,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] APN Setup
 * [x] Baud Rate Configuration
 * [x] Device mode setting (normal, flight, limited, etc)
-* [ ] MQTT
+* [x] MQTT
 * [ ] SSL
 * [ ] SIM Locking
 * [ ] SIM Toolkit
