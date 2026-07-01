@@ -44,7 +44,7 @@ PUB ringBufferPut(c)
         wip_start  := buf_tail
         wip_len    := 0
         wip_active := 1
-        debug("frame_putc: new frame started at buf[", udec_(wip_start), "]")
+        ' debug("frame_putc: new frame started at buf[", udec_(wip_start), "]")
 
     repeat while ringBufferMemFree() == 0
         ' the queue is full
@@ -71,7 +71,7 @@ PUB ringBufferCommit() : ok
 
     frame_count++
 
-    debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(frame_count))
+    ' debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(frame_count))
 
     wip_active := 0
     wip_len    := 0

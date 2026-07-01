@@ -15,8 +15,8 @@
     }
   },
   "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
-  "spin2.fNameTopLevel": "99_mqtt_dht.spin2",
-  "spin2.optionsBinaryFname": "99_mqtt_dht.binary",
+  "spin2.fNameTopLevel": "01_modem_info.spin2",
+  "spin2.optionsBinaryFname": "01_modem_info.binary",
   "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
   "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
   "spinExtension.toolchain.optionsCompile.enableDebug": true,

@@ -35,7 +35,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] Network Operator Scanning
 * [x] APN Setup
 * [x] Baud Rate Configuration
-* [x] Device mode setting (normal, flight, limited, etc)
+* [ ] Device mode setting (normal, flight, limited, etc)
 * [x] MQTT
 * [ ] SSL
 * [ ] SIM Locking
