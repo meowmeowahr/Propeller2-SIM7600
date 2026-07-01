@@ -8,37 +8,34 @@
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 04 JUN 2026
-''   Updated.... 05 JUN 2026
+''   Updated.... 30 JUN 2026
 ''
 '' =================================================================================================
 
-OBJ
-    cf          : "ka_modem_settings"
-
 VAR
-    BYTE    ring_buffer[cf.BUF_SIZE]                                ' frame byte ring buffer
-    LONG    frame_starts[cf.MAX_FRAMES]                             ' frame start indices in fifo
+    LONG    ring_buffer                                             ' pointer to byte ring storage (ring_size bytes)
+    LONG    ring_size                                               ' size of byte ring, in bytes (power of two)
 
     LONG    buf_tail                                                ' next free byte position in ring
-    LONG    starts_head                                             ' index read pointer
-    LONG    starts_tail                                             ' index write pointer
+    LONG    buf_head                                                ' start of oldest frame (committed or in-progress)
     LONG    frame_count                                             ' number of complete frames in queue
 
     LONG    wip_start                                               ' byte-ring offset where current partial frame began
     LONG    wip_len                                                 ' bytes written so far into current partial frame
     LONG    wip_active                                              ' non-zero while a partial frame is open
 
-PUB ringBufferInit()
+PUB ringBufferInit(pRingBuf, ringSize)
 
-    buf_tail   := 0
-    starts_head   := 0
-    starts_tail   := 0
+    ring_buffer := pRingBuf
+    ring_size   := ringSize
+
+    buf_tail    := 0
+    buf_head    := 0
     frame_count := 0
-    wip_start  := 0
-    wip_len    := 0
-    wip_active := 0
-    bytefill(@ring_buffer, 0, cf.BUF_SIZE)
-    longfill(@frame_starts, 0, cf.MAX_FRAMES)
+    wip_start   := 0
+    wip_len     := 0
+    wip_active  := 0
+    bytefill(ring_buffer, 0, ring_size)
 
 
 PUB ringBufferPut(c)
@@ -53,8 +50,8 @@ PUB ringBufferPut(c)
         ' the queue is full
         ringBufferDrop()
 
-    ring_buffer[buf_tail] := c
-    buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
+    BYTE[ring_buffer][buf_tail] := c
+    buf_tail := (buf_tail + 1) & (ring_size - 1)
     wip_len++
 
 
@@ -69,17 +66,9 @@ PUB ringBufferCommit() : ok
         ' the queue is full, must make room for null terminator
         ringBufferDrop()
 
-    ring_buffer[buf_tail] := 0                            ' null terminator
-    buf_tail := (buf_tail + 1) & (cf.BUF_SIZE - 1)
+    BYTE[ring_buffer][buf_tail] := 0                    ' null terminator
+    buf_tail := (buf_tail + 1) & (ring_size - 1)
 
-    ' drop oldest frame if the ring is full
-    if frame_count >= cf.MAX_FRAMES
-        debug("frame_commit: ring full — dropping oldest frame entry")
-        ringBufferDrop()
-
-    ' Register frame start in index ring
-    frame_starts[starts_tail] := wip_start
-    starts_tail  := (starts_tail + 1) & (cf.MAX_FRAMES - 1)
     frame_count++
 
     debug("frame_commit: committed frame @buf[", udec_(wip_start), "]  len=", udec_(wip_len), "  frames_queued=", udec_(frame_count))
@@ -103,9 +92,9 @@ PUB ringBufferReadStr(pDst, maxLen) : n
 
     n := ringBufferPeekStr(pDst, maxLen)
 
-    ' advance head
-    starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
-    frame_count--
+    if n >= 0
+        ringBufferAdvanceHead()
+        frame_count--
 
 
 PUB ringBufferPeekStr(pDst, maxLen) : n | src, c
@@ -115,12 +104,12 @@ PUB ringBufferPeekStr(pDst, maxLen) : n | src, c
         n := -1
         return
 
-    src := frame_starts[starts_head]
+    src := buf_head
     n   := 0
 
     repeat
-        c := ring_buffer[src]
-        src := (src + 1) & (cf.BUF_SIZE - 1)
+        c := BYTE[ring_buffer][src]
+        src := (src + 1) & (ring_size - 1)
         if n < maxLen - 1
             BYTE[pDst][n] := c
         n++
@@ -140,23 +129,17 @@ PUB ringBufferIsEmpty() : e
 
 
 PUB ringBufferIsFull() : f
-    f := (frame_count >= cf.MAX_FRAMES)
+    f := (ringBufferMemFree() == 0)
 
 
-PRI ringBufferMemFree() : free | oldest_start
+PRI ringBufferMemFree() : FREE
 
     if frame_count == 0 AND not wip_active
-        free := cf.BUF_SIZE                             ' ring is empty
+        FREE := ring_size                               ' ring is empty
         return
 
-    ' oldest live byte is either the oldest complete frame or the start of the current partial frame
-    if frame_count > 0
-        oldest_start := frame_starts[starts_head]
-    else
-        oldest_start := wip_start
-
-    ' distance from tail to oldest_start
-    free := (oldest_start - buf_tail - 1) & (cf.BUF_SIZE - 1)
+    ' oldest live byte is buf_head, whether it belongs to a committed frame or the in-progress one
+    FREE := (buf_head - buf_tail - 1) & (ring_size - 1)
 
 
 PUB ringBufferDrop()
@@ -165,8 +148,19 @@ PUB ringBufferDrop()
         ' nothing to drop
         return
 
-    starts_head  := (starts_head + 1) & (cf.MAX_FRAMES - 1)
+    ringBufferAdvanceHead()
     frame_count--
+
+
+PRI ringBufferAdvanceHead() | c
+' scans forward from buf_head past the oldest frame's null terminator;
+' the resulting buf_head is the start of the next frame
+
+    repeat
+        c := BYTE[ring_buffer][buf_head]
+        buf_head := (buf_head + 1) & (ring_size - 1)
+        if c == 0
+            quit
 
 CON { license }
 

@@ -8,7 +8,7 @@
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 04 JUN 2026
-''   Updated.... 05 JUN 2026
+''   Updated.... 30 JUN 2026
 ''
 '' =================================================================================================
 
@@ -23,6 +23,11 @@ CON
 
 CON
 
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
+CON
+
     {{
         SIM7600 Supported Baud Rates
         0, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115_200, 230_400, 460_800, 921_600, 3_000_000, 3_200_000, 3_686_400
@@ -31,12 +36,18 @@ CON
     OLD_BAUD  = 115200                                              ' old baud rate, default for SIM7600 is 115200
     NEW_BAUD  = 921600                                              ' new baud rate to apply to non-volatile storage
 
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
 OBJ
 
     modem       : "ka_sim7600"
 
 PUB main() | status, buf[128]
-    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1)          ' force device reset
+    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' force device reset
 
     ' Wait until modem is ready
     repeat
@@ -53,7 +64,7 @@ PUB main() | status, buf[128]
     debug("setPermanentBaudRate status ", udec(status))
 
     modem.stop()
-    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1)          ' must reboot to apply
+    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' must reboot to apply
 
     ' Wait until modem is ready
     repeat
@@ -65,6 +76,9 @@ PUB main() | status, buf[128]
 
     status := modem.getModemModel(@buf, 128)
     debug("getModemModel after changing baud", udec(status), zstr(@buf))
+
+    repeat
+        waitct(1)
 
 CON { license }
 

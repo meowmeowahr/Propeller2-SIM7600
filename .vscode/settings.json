@@ -15,8 +15,8 @@
         }
     },
     "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
-    "spin2.fNameTopLevel": "05_mqtt_subscribe.spin2",
-    "spin2.optionsBinaryFname": "05_mqtt_subscribe.binary",
+    "spin2.fNameTopLevel": "01_modem_info.spin2",
+    "spin2.optionsBinaryFname": "01_modem_info.binary",
     "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
     "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin",
     "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
@@ -74,7 +74,7 @@
         "-FIFO",
         "8192",
         "-FLASH",
-        "-p/dev/ttyUSB1"
+        "-p/dev/ttyUSB0"
     ],
     "spin2.optionsBuild": [
         "-2",
@@ -136,5 +136,5 @@
         "WCDMA",
         "zstr"
     ],
-    "spin2.serialPort": "/dev/ttyUSB1",
+    "spin2.serialPort": "/dev/ttyUSB0",
 }

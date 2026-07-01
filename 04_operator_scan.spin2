@@ -1,20 +1,54 @@
 {Spin2_v53}
 
+'' =================================================================================================
+''
+''   File....... 04_operator_scan.spin2
+''   Purpose.... Cellular Network Operator Scan Example for SIM7600 Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 28 JUN 2026
+''   Updated.... 30 JUN 2026
+''
+'' =================================================================================================
+
+CON
+
+    _CLKFREQ  = 200_000_000
+
+    RX        = 1
+    TX        = 0
+    DTR       = 2
+    RST       = 3
+
+CON
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
 OBJ
     modem       : "ka_sim7600"
     str         : "string"
 
 VAR
-    opName[64]
-    opHNI[32]
-    count
+    BYTE    opName[64]
+    BYTE    opHNI[32]
+    BYTE    count
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
 
 PUB main() | i
-    modem.start(1, 0, 2, 3, 115_200, 0)
+    modem.start(RX, TX, DTR, RST, 115_200, 0, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
-    repeat while not modem.isReady()
-        debug("Waiting for modem...")
-        waitms(500)
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        debug("Modem starting...")
+        if modem.isReady()
+            debug("Modem ready!")
+            quit
 
     debug("Starting operator search...")
     modem.startOperatorSearch()
@@ -33,4 +67,28 @@ PUB main() | i
                 debug("Operator ", udec(i), ": ", zstr(@opName), " HNI: ", zstr(@opHNI))
         i++
 
-    modem.stop()
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

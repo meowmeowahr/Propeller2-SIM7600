@@ -21,6 +21,11 @@ CON
     DTR       = 2
     RST       = 3
 
+CON
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
 OBJ
 
     modem       : "ka_sim7600"
@@ -31,8 +36,12 @@ VAR
     BYTE    topicBuf[128]
     BYTE    payloadBuf[512]
 
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
 PUB main() | status
-    modem.start(RX, TX, DTR, RST, 115_200, 1)
+    modem.start(RX, TX, DTR, RST, 115_200, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' leds off
     pinl(56)

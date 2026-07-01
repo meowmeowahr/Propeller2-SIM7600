@@ -8,7 +8,7 @@
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 05 JUN 2026
-''   Updated.... 05 JUN 2026
+''   Updated.... 30 JUN 2026
 ''
 '' =================================================================================================
 
@@ -21,13 +21,24 @@ CON
     DTR       = 2
     RST       = 3
 
+CON
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
 OBJ
 
     modem       : "ka_sim7600"
     utils       : "ka_modem_utils"
 
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
 PUB main() | status, BYTE rssi, BYTE ber
-    modem.start(RX, TX, DTR, RST, 115_200, 0)
+    modem.start(RX, TX, DTR, RST, 115_200, 0, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' Wait until modem is ready
     repeat

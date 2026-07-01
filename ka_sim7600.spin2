@@ -78,7 +78,7 @@ PUB null()
 ' this is not a top-level object
 
 
-PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
+PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset, pRxBuffer, rxBufferSize, pUrcBuffer, urcBufferSize)
     dtrP := dtrPin
     rstP := rstPin
     rxP := rxPin
@@ -94,8 +94,8 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset)
 
     cogId := cogspin(newcog, modemCog(), @modemStack)
 
-    fifoRx.ringBufferInit()
-    fifoUrc.ringBufferInit()
+    fifoRx.ringBufferInit(pRxBuffer, rxBufferSize)
+    fifoUrc.ringBufferInit(pUrcBuffer, urcBufferSize)
     mqttPayloadLen := 0
     mqttPayloadExpected := 0
     mqttClientNum := 0
@@ -118,25 +118,6 @@ PUB stop()
 
     ser.stop()
     cogstop(cogId)
-    fifoRx.ringBufferInit()
-    fifoUrc.ringBufferInit()
-    mqttPayloadLen := 0
-    mqttPayloadExpected := 0
-    mqttClientNum := 0
-    inMqttPayload := 0
-    mqttPayloadReady := 0
-    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
-
-    mqttTopicLen := 0
-    mqttTopicExpected := 0
-    inMqttTopic := 0
-    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
-
-    inWaitingPayloadAddr := 0
-    inWaitingPayloadLen := 0
-    inWaitingForPrompt := false
-    mqttConnectResult := $FF
-
 
 PUB hardReset()
 
@@ -619,6 +600,9 @@ PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
             elseif strcomp(@buf, @"OK")
                 ifnot modemIsReady
                     markModemReady()                    ' from initial AT
+                    smsIsReady := true                  ' TODO: there might be a better way to detect subsystem readiness
+                    phonebookIsReady := true
+                    simIsReady := true
                 if inWaitingEchoed
                     commandResultCode := RESULT_OK
                     inWaitingCompleted := true
