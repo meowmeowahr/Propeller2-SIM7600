@@ -1,5 +1,6 @@
 *.binary
 *.p2asm
 *.log
+*.lst
 
 00_secrets.spin2

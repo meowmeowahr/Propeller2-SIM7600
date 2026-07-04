@@ -616,7 +616,7 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
                         else
                             fsLsOverflow := 1
                 next
-                
+
             ' urcs
             if strcomp(@buf, @"RDY")
                 markModemReady()
@@ -1071,6 +1071,10 @@ PUB fsDel(path) : r | tmp[128]
     str.sprintf1(@tmp, @"AT+FSDEL=%s\000", path)
     r := runCommand(@tmp)
 
+
+PUB fsRename(pOld, pNew) : r | tmp[128]
+    str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
+    r := runCommand(@tmp)
 
 PUB fsFileCount() : r | tmp[128], addr
 

@@ -13,7 +13,7 @@
 '' =================================================================================================
 
 CON
-
+    debug_main
     _CLKFREQ  = 200_000_000
 
     BR_TERM   = 230_400                                             ' terminal baud rate
@@ -123,6 +123,8 @@ PUB processCommand(p_input) : r | ct
         r := modem.fsRmdir(p_input + 6)
     elseif str.startswith(p_input, @"rm ")
         r := modem.fsDel(p_input + 3)
+    elseif str.startswith(p_input, @"rename ")
+        r := doRename(p_input + 7)
     elseif strcomp(p_input, @"fc")
         ct := modem.fsFileCount()
         if ct == -1
@@ -155,6 +157,27 @@ PUB processCommand(p_input) : r | ct
     else
         r := 2
 
+PRI doRename(pArgs) : r | addr
+'' pArgs points at "<from> <to>" (the part after "mv "). Split on the first
+'' space, then call fsRename(from, to).
+
+    addr := pArgs
+    repeat while (BYTE[addr] <> " ") and (BYTE[addr] <> 0)
+        addr++
+
+    if BYTE[addr] <> " "
+        return 2                            ' malformed - no second argument
+
+    BYTE[addr] := 0                          ' terminate "from" in place
+    addr++                                    ' skip the space
+
+    repeat while (BYTE[addr] == " ")         ' tolerate extra spaces before "to"
+        addr++
+
+    if BYTE[addr] == 0
+        return 2                            ' malformed - "to" missing/empty
+
+    r := modem.fsRename(pArgs, addr)
 
 PRI printEntryList(type, pBuf) | addr
 '' Walk a 255-separated, 0-terminated list of entries, printing one per line
