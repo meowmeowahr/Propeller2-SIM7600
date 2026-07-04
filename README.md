@@ -33,6 +33,9 @@ All examples use the following pinout:
 | DTR   | 2  |
 | RST   | 3  |
 
+> [!NOTE]
+> Level shifting is not required, as the module operates at 3.3v logic levels. Ensure that `Vio` is not connected, if using the Waveshare board
+
 All examples use 115200 baud for the modem with 4KB RX and URC buffers.
 
 > [!NOTE]
