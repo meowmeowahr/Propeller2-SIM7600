@@ -145,6 +145,8 @@
     "Mosquitto",
     "mqtt",
     "MQTTX",
+    "NETCLOSE",
+    "NETOPEN",
     "newcog",
     "nstr",
     "perfboard",

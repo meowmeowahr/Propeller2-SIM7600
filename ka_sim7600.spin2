@@ -520,7 +520,7 @@ PRI appendResponse(buf) | len, responseLen
     BYTE[responseBuffer][responseLen] := 0
 
 
-PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc, i
+PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc
     if doInitialReset
         hardReset()
     else
@@ -711,7 +711,7 @@ PRI streamPayloadToModem() | c
     debug("Payload streamed: ", udec(payloadSent), " / ", udec(inWaitingPayloadLen))
 
 
-PRI payload_init(pRing, size) | i
+PRI payload_init(pRing, size)
     payload_ring_ptr := pRing
     payload_ring_mask := size - 1
     payload_head := 0
@@ -901,7 +901,7 @@ PUB mqttPublishStreamDone() : r | tmp[64]
     r := runCommand(@tmp)
 
 
-PUB mqttPublishStreamByte(byteValue) : remaining | r
+PUB mqttPublishStreamByte(byteValue) : r
 '' Send a single byte in the MQTT publish stream
 '' Returns number of bytes remaining to send (including this one), or -1 on error
 
@@ -918,13 +918,13 @@ PUB mqttPublishStreamByte(byteValue) : remaining | r
     ' We reuse the existing payload buffer and feedPayload mechanism
     if payload_put(byteValue)
         mqttPublishPayloadSent++
-        return mqttPublishPayloadLen - mqttPublishPayloadSent
+        r := mqttPublishPayloadLen - mqttPublishPayloadSent
     else
         ' Buffer full - caller should wait and try again
-        return -1
+        r := -1
 
 
-PUB mqttPublishStreamStr(pStr) : remaining | len, i, success
+PUB mqttPublishStreamStr(pStr) : r | len, i, success
 '' Send a string in the MQTT publish stream
 '' Returns number of bytes remaining to send (including this string), or -1 on error
 
@@ -950,7 +950,7 @@ PUB mqttPublishStreamStr(pStr) : remaining | len, i, success
             return (mqttPublishPayloadLen - mqttPublishPayloadSent) + (len - i)
     repeat
 
-    return mqttPublishPayloadLen - mqttPublishPayloadSent
+    r := mqttPublishPayloadLen - mqttPublishPayloadSent
 
 
 PUB mqttDisconnect(clientNum, timeout) : r | tmp[64]
@@ -958,12 +958,12 @@ PUB mqttDisconnect(clientNum, timeout) : r | tmp[64]
     r := runCommand(@tmp)
 
 
-PUB mqttReleaseClient(clientNum) : r | tmp[64]
+PUB mqttReleaseClient(clientNum) : r | tmp[14]
     str.sprintf1(@tmp, @"AT+CMQTTREL=%d\000", clientNum)
     r := runCommand(@tmp)
 
 
-PUB definePdpContext(cid, pAPN) : r | tmp[128], args[6]
+PUB definePdpContext(cid, pAPN) : r | tmp[128]
     str.sprintf6(@tmp, @"AT+CGDCONT=%d,%cIP%c,%c%s%c\000", cid, 34, 34, 34, pAPN, 34)
     r := runCommand(@tmp)
 

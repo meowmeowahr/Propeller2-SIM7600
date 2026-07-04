@@ -19,7 +19,7 @@ The driver is tested in [FlexSpin 7.6.11](https://github.com/totalspectrum/flexp
 * DHT22/11 Temperature/Humidity sensor required for some examples
 * I also soldered a perfboard and female headers, as the module is too wide for the breadboard.
 
-> [!TIP]
+> [!WARNING]
 > The SIM7600 can cause large transient current spikes (>2A) when transmitting data. Use a stable supply for stability. The Waveshare module includes a MIC29302 LDO configured for 3.88V.
 
 ## Examples
@@ -164,3 +164,4 @@ This project includes the following community objects:
 | jm_dhtxx.spin2            | Jon "JonnyMac" McPhalen    | MIT     |
 | jm_fullduplexserial.spin2 | Jon "JonnyMac" McPhalen    | MIT     |
 | string.spin2              | Jesse Burt                 | MIT     |
+| char.type.spin2           | Jesse Burt                 | MIT     |
