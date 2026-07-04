@@ -117,6 +117,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] Baud Rate Configuration
 * [ ] Device mode setting (normal, flight, limited, etc)
 * [x] MQTT
+* [ ] Hardware Flow Control
 * [ ] SSL
 * [ ] SIM Locking
 * [ ] SIM Toolkit

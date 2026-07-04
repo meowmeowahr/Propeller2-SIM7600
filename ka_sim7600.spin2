@@ -16,7 +16,7 @@ CON
 
     MAX_LINE_LENGTH   = 1024
     MAX_RESPONSE      = 8192
-    PAYLOAD_BUF_SIZE  = 32
+    PAYLOAD_MOSI_BUF_SIZE  = 32
 
 CON
 
@@ -81,10 +81,10 @@ VAR
     BYTE    driverState
 
     ' payload ring buffer
-    LONG    payload_ring_ptr                                        ' pointer to byte array
-    LONG    payload_ring_mask                                       ' size-1 for fast wrapping
-    LONG    payload_head                                            ' write position
-    LONG    payload_tail                                            ' read position
+    LONG    payloadMosi_ring_ptr                                        ' pointer to byte array
+    LONG    payloadMosi_ring_mask                                       ' size-1 for fast wrapping
+    LONG    payloadMosi_head                                            ' write position
+    LONG    payloadMosi_tail                                            ' read position
 
     ' command input
     BYTE    inWaitingCommand[MAX_LINE_LENGTH]
@@ -106,7 +106,7 @@ VAR
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
 
     ' Payload streaming
-    BYTE    payloadBuffer[PAYLOAD_BUF_SIZE]
+    BYTE    payloadBuffer[PAYLOAD_MOSI_BUF_SIZE]
     LONG    inWaitingPayloadLen                                     ' Total expected bytes (for progress)
     LONG    payloadSent                                             ' How many bytes already sent
 
@@ -174,7 +174,7 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset, pRxBuffer, rxBufferSize, 
     mqttPayloadReady := 0
     bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
 
-    payload_init(@payloadBuffer, PAYLOAD_BUF_SIZE)
+    payloadMosi_init(@payloadBuffer, PAYLOAD_MOSI_BUF_SIZE)
     inWaitingPayloadLen := 0
     payloadSent := 0
 
@@ -514,12 +514,12 @@ PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r | i
 
     inWaitingPayloadLen := payloadLen
     payloadSent := 0
-    payload_flush()
+    payloadMosi_flush()
 
     ' If small payload, preload into ring buffer
-    if payloadLen <= PAYLOAD_BUF_SIZE
+    if payloadLen <= PAYLOAD_MOSI_BUF_SIZE
         repeat i from 0 to payloadLen-1
-            payload_put(BYTE[p_payload][i])
+            payloadMosi_put(BYTE[p_payload][i])
     else
         ' Large payload: user must call feedPayload() before prompt arrives
         debug("Large payload: use feedPayload()")
@@ -530,12 +530,12 @@ PRI runCommandWithPayload(p_cmdStr, p_payload, payloadLen) : r | i
     r := getCommandResult()
 
 ' New helper for large/streaming payloads
-PUB feedPayload(p_data, len) : sent
+PUB feedPayloadMosi(p_data, len) : sent
 '' Feed data into the payload stream (call repeatedly for large files)
 
     sent := 0
     repeat len
-        if payload_put(BYTE[p_data][sent])
+        if payloadMosi_put(BYTE[p_data][sent])
             sent++
         else
             ' Buffer full - caller should wait a bit
@@ -859,8 +859,8 @@ PRI streamPayloadToModem() | c
 
     payloadSent := 0
     debug("Streaming payload to modem, total bytes: ", udec(inWaitingPayloadLen))
-    repeat while (payload_available() > 0) or (payloadSent < inWaitingPayloadLen)
-        c := payload_get()
+    repeat while (payloadMosi_available() > 0) or (payloadSent < inWaitingPayloadLen)
+        c := payloadMosi_get()
         if c == -1
             next
         ser.tx(c)
@@ -869,39 +869,39 @@ PRI streamPayloadToModem() | c
     debug("Payload streamed: ", udec(payloadSent), " / ", udec(inWaitingPayloadLen))
 
 
-PRI payload_init(pRing, size)
-    payload_ring_ptr := pRing
-    payload_ring_mask := size - 1
-    payload_head := 0
-    payload_tail := 0
-    bytefill(payload_ring_ptr, 0, size)
+PRI payloadMosi_init(pRing, size)
+    payloadMosi_ring_ptr := pRing
+    payloadMosi_ring_mask := size - 1
+    payloadMosi_head := 0
+    payloadMosi_tail := 0
+    bytefill(payloadMosi_ring_ptr, 0, size)
 
 
-PRI payload_put(c) : ok
-    if ((payload_head + 1) & payload_ring_mask) == payload_tail
+PRI payloadMosi_put(c) : ok
+    if ((payloadMosi_head + 1) & payloadMosi_ring_mask) == payloadMosi_tail
         return false
 
-    BYTE[payload_ring_ptr][payload_head] := c
-    payload_head := (payload_head + 1) & payload_ring_mask
+    BYTE[payloadMosi_ring_ptr][payloadMosi_head] := c
+    payloadMosi_head := (payloadMosi_head + 1) & payloadMosi_ring_mask
     ok := true
 
 
-PRI payload_get() : b
-    if (payload_head == payload_tail)
+PRI payloadMosi_get() : b
+    if (payloadMosi_head == payloadMosi_tail)
         return -1
 
-    b := BYTE[payload_ring_ptr][payload_tail]
-    payload_tail := (payload_tail + 1) & payload_ring_mask
+    b := BYTE[payloadMosi_ring_ptr][payloadMosi_tail]
+    payloadMosi_tail := (payloadMosi_tail + 1) & payloadMosi_ring_mask
     return b
 
 
-PRI payload_available() : c
-    c := (payload_head - payload_tail) & payload_ring_mask
+PRI payloadMosi_available() : c
+    c := (payloadMosi_head - payloadMosi_tail) & payloadMosi_ring_mask
 
 
-PRI payload_flush()
-    payload_head := 0
-    payload_tail := 0
+PRI payloadMosi_flush()
+    payloadMosi_head := 0
+    payloadMosi_tail := 0
 
 
 PUB getInWaitingMqttTopic(pDst, maxLen) : r | lenToCopy
@@ -1044,7 +1044,7 @@ PUB startMqttPublishStream(clientNum, pTopic, qos, retain, timeout, length) : r 
     inWaitingForPrompt := true
     inWaitingPayloadLen := length
     payloadSent := 0
-    payload_flush()
+    payloadMosi_flush()
     runBlindCommandForPrompt(@tmp)
     mqttPublishLenSet := true
 
@@ -1074,7 +1074,7 @@ PUB mqttPublishStreamByte(byteValue) : r
 
     ' Send the byte via the payload stream mechanism
     ' We reuse the existing payload buffer and feedPayload mechanism
-    if payload_put(byteValue)
+    if payloadMosi_put(byteValue)
         mqttPublishPayloadSent++
         r := mqttPublishPayloadLen - mqttPublishPayloadSent
     else
@@ -1100,7 +1100,7 @@ PUB mqttPublishStreamStr(pStr) : r | len, i, success
 
     ' Send each character
     repeat i from 0 to len-1
-        success := payload_put(BYTE[pStr][i])
+        success := payloadMosi_put(BYTE[pStr][i])
         if success
             mqttPublishPayloadSent++
         else
