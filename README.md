@@ -4,6 +4,8 @@ SIMCOM SIM7600 Driver for a P2 running in a dedicated cog. The module supports 2
 
 The driver is tested in [FlexSpin 7.6.11](https://github.com/totalspectrum/flexprop/releases/tag/v7.6.11)
 
+The driver may be compatible with the SIM7500 modem, but hasn't been tested with it.
+
 ## Test Hardware
 
 * Modem

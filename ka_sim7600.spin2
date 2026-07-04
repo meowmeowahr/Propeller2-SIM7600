@@ -1,14 +1,16 @@
 {Spin2_v53}
 
+'' =================================================================================================
 ''
-'   File....... ka_sim7600.spin2
-'   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
-'   Authors.... Kevin Ahr
-'               -- see below for terms of use
-'   E-mail..... meowmeowahr@gmail.com
-'   Started.... 04 JUN 2026
-'   Updated.... 05 JUN 2026
+''   File....... ka_sim7600.spin2
+''   Purpose.... Object for SIMCOM SIM7600 4G/3G/2G Cellular Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 04 JUN 2026
+''   Updated.... 03 JUL 2026
 ''
+'' =================================================================================================
 
 CON
 
@@ -36,34 +38,40 @@ OBJ
     fifoUrc     : "ka_ring_buffer"
 
 VAR
+    ' driver cfg
     BYTE    rxP, txP, dtrP, rstP
     LONG    baudRate
 
+    ' driver
     BYTE    cogId
     BYTE    driverState
 
-    ' Payload ring buffer (replaces simple_ring_buffer object)
+    ' payload ring buffer
     LONG    payload_ring_ptr                                        ' pointer to byte array
     LONG    payload_ring_mask                                       ' size-1 for fast wrapping
     LONG    payload_head                                            ' write position
     LONG    payload_tail                                            ' read position
 
+    ' command input
     BYTE    inWaitingCommand[MAX_LINE_LENGTH]
     BYTE    inWaitingEchoed
     BYTE    inWaitingCompleted
     BYTE    commandResultCode
 
+    ' response
     BYTE    responseBuffer[MAX_RESPONSE]
+    BYTE    buf[MAX_LINE_LENGTH]
 
+    ' errors
     WORD    lastCmeError, lastCmsError
 
-    BYTE    modemStack[MAX_LINE_LENGTH + 256]
+    BYTE    modemStack[MAX_LINE_LENGTH + 1000]
 
     BYTE    doInitialReset
 
     BYTE    modemIsReady, smsIsReady, phonebookIsReady, simIsReady
 
-' Payload streaming
+    ' Payload streaming
     BYTE    payloadBuffer[PAYLOAD_BUF_SIZE]
     LONG    inWaitingPayloadLen                                     ' Total expected bytes (for progress)
     LONG    payloadSent                                             ' How many bytes already sent
@@ -228,6 +236,18 @@ PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
 
 PUB isReady() : ready
     ready := modemIsReady && smsIsReady && simIsReady
+
+
+PUB modemReady() : ready
+    ready := modemIsReady
+
+
+PUB smsReady() : ready
+    ready := smsIsReady
+
+
+PUB simReady() : ready
+    ready := simIsReady
 
 
 PUB getModemFirmwareRevision(p_resp, maxLen) : r
@@ -520,12 +540,11 @@ PRI appendResponse(buf) | len, responseLen
     BYTE[responseBuffer][responseLen] := 0
 
 
-PRI modemCog() | inChar, buf[MAX_LINE_LENGTH], addr, len, clientNumFromUrc
+PRI modemCog() | inChar, addr, len, clientNumFromUrc
     if doInitialReset
         hardReset()
     else
         sendCommand(@"AT")
-
     repeat
         repeat
             inChar := ser.rxCheck()
@@ -974,3 +993,54 @@ PUB netOpen() : r
 
 PUB netClose() : r
     r := runCommand(@"AT+NETCLOSE")
+
+
+PUB fsPwd(p_resp, maxLen) : r
+
+    sendCommand(@"AT+FSCD?")
+    repeat while isCommandRunning()
+    strcopy(p_resp, getCommandResponse()+7, maxLen)
+    r := getCommandResult()
+
+
+PUB fsCd(pPath): r | tmp[128]
+    str.sprintf1(@tmp, @"AT+FSCD=%s\000", pPath)
+    r := runCommand(@tmp)
+
+
+PUB fsMkdir(path) : r | tmp[128]
+    str.sprintf1(@tmp, @"AT+FSMKDIR=%s\000", path)
+    r := runCommand(@tmp)
+
+PUB fsRmdir(path) : r | tmp[128]
+    str.sprintf1(@tmp, @"AT+FSRMDIR=%s\000", path)
+    r := runCommand(@tmp)
+
+PUB fsFileCount() : r | tmp[128], addr
+
+    r := runCommandAndGetResponse(@"AT+FSLS?", @tmp, 128)
+    if r <> RESULT_OK
+        return -1
+
+    addr := @tmp
+    repeat while (BYTE[addr] <> 0)
+        if str.startswith(addr, @"FILES:")
+            return str.atoi(addr + 6)                   ' skip "FILES:" (6 chars)
+        addr++
+
+    return -1                                           ' "FILES:" not found in response
+
+
+PUB fsSubdirectoryCount() : r | tmp[128], addr
+
+    r := runCommandAndGetResponse(@"AT+FSLS?", @tmp, 128)
+    if r <> RESULT_OK
+        return -1
+
+    addr := @tmp
+    repeat while (BYTE[addr] <> 0)
+        if str.startswith(addr, @"SUBDIRECTORIES:")
+            return str.atoi(addr + 15)                  ' skip "SUBDIRECTORIES:" (15 chars)
+        addr++
+
+    return -1                                           ' "SUBDIRECTORIES:" not found in response

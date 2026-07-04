@@ -1,0 +1,164 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 08_filesystem.spin2
+''   Purpose.... Get basic info from SIM7600 Modem
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 03 JUL 2026
+''   Updated.... 03 JUL 2026
+''
+'' =================================================================================================
+
+CON
+
+    _CLKFREQ  = 200_000_000
+
+    BR_TERM   = 230_400                                             ' terminal baud rate
+
+CON { app io pins }
+
+    RX   = 1
+    TX   = 0
+    DTR  = 2
+    RST  = 3
+
+CON
+
+    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_RESET      = 0                                            ' Reset modem on startup, 0 = no reset, 1 = reset
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 1024
+
+OBJ
+
+    modem       : "ka_sim7600"
+    term        : "jm_fullduplexserial"
+    str         : "string"
+
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
+    byte    cwd[128]
+    byte    input[128]
+    byte    returnCode
+
+PUB main() | pos, c
+
+    modem.start(RX, TX, DTR, RST, MODEM_BAUD, MODEM_RESET, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    term.tstart(BR_TERM)
+
+    ' wait for terminal input
+    term.rxflush()
+    term.rx()
+
+    term.str(@"Modem starting.")
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        term.tx(".")
+        if modem.isReady()
+            term.TX(10)
+            term.TX(13)
+            term.str(@"Modem ready")
+            term.TX(10)
+            term.TX(13)
+            quit
+    
+    modem.fsPwd(@cwd, 128)
+    term.tx("[")
+    term.dec(returnCode)
+    term.tx("]")
+    term.tx(" ")
+    term.str(@cwd)
+    term.str(@"> ")
+    repeat
+        c := term.rxcheck()
+        case c
+            -1, 0, term.LF:
+                next
+            term.CR:
+                input[pos] := 0
+                term.TX(10)
+                term.TX(13)
+                returnCode := processCommand(@input)
+                pos := 0
+                modem.fsPwd(@cwd, 128)
+                term.tx("[")
+                term.dec(returnCode)
+                term.tx("]")
+                term.tx(" ")
+                term.str(@cwd)
+                term.str(@"> ")
+            127:
+                if pos > 0
+                    pos -= 1
+                    term.tx(term.BKSP)
+                    term.tx(32)
+                    term.tx(term.BKSP)
+            other:
+                input[pos] := c
+                pos += 1
+                term.tx(c)
+
+PUB processCommand(p_input) : r | ct
+    if str.startswith(p_input, @"cd ")
+        r := modem.fsCd(p_input + 3)
+    elseif str.startswith(p_input, @"mkdir ")
+        r := modem.fsMkdir(p_input + 6)
+    elseif str.startswith(p_input, @"rmdir ")
+        r := modem.fsRmdir(p_input + 6)
+    elseif strcomp(p_input, @"fc")
+        ct := modem.fsFileCount()
+        if ct == -1
+            return 1
+        term.dec(ct)
+        term.str(@" files")
+        term.tx(10)
+        term.tx(13)
+        return 0
+    elseif strcomp(p_input, @"sdc")
+        ct := modem.fsSubdirectoryCount()
+        if ct == -1
+            return 1
+        term.dec(ct)
+        term.str(@" directories")
+        term.tx(10)
+        term.tx(13)
+        return 0
+    elseif str.isempty(p_input)
+        r := returnCode
+    else
+        r := 2
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}
