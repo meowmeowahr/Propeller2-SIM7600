@@ -25,7 +25,26 @@ CON
 
     #0, DRIVER_NOT_STARTED, DRIVER_STARTING, DRIVER_READY, DRIVER_RESETTING
 
-    #0, RESULT_OK, RESULT_ERROR, RESULT_CME_ERROR, RESULT_CMS_ERROR, RESULT_ABORTED, RESULT_PROMPT
+    #0, RESULT_OK, ...
+        RESULT_ERROR, ...
+        RESULT_CME_ERROR, ...
+        RESULT_CMS_ERROR, ...
+        RESULT_ABORTED, ...
+        RESULT_PROMPT, ...
+        RESULT_SD_NOT_PLUGGED_IN, ...
+        RESULT_FILE_EXISTING, ...
+        RESULT_FILE_NOT_EXISTING, ...
+        RESULT_DIR_EXISTED, ...
+        RESULT_DIR_NOT_EXISTED, ...
+        RESULT_FORBID_CREATE_DIR_UNDER_C, ...
+        RESULT_FORBID_DELETE_DIR, ...
+        RESULT_INVALID_PATH_NAME, ...
+        RESULT_INVALID_FILE_NAME, ...
+        RESULT_SD_NO_MEMORY, ...
+        RESULT_EFS_NO_MEMORY, ...
+        RESULT_FILE_CREATE_ERROR, ...
+        RESULT_READ_FILE_ERROR, ...
+        RESULT_WRITE_FILE_ERROR
 
     #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
 
@@ -43,12 +62,6 @@ DAT
     Thursday    BYTE    "Thu",0
     Friday      BYTE    "Fri",0
 
-    Weekdays    WORD    @Sunday
-                WORD    @Monday
-                WORD    @Tuesday
-                WORD    @Wednesday
-                WORD    @Thursday
-                WORD    @Friday
 
 OBJ
     ser         : "jm_fullduplexserial"
@@ -779,6 +792,62 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
                 debug("Command completed with CMS ERROR")
                 ' read number value
                 lastCmsError := str.atoi(@buf+12)
+            elseif strcomp(@buf, @"SD CARD NOT PLUGGED IN")
+                commandResultCode := RESULT_SD_NOT_PLUGGED_IN
+                inWaitingCompleted := true
+                debug("Filesystem error: SD CARD NOT PLUGGED IN")
+            elseif strcomp(@buf, @"FILE IS EXISTING")
+                commandResultCode := RESULT_FILE_EXISTING
+                inWaitingCompleted := true
+                debug("Filesystem error: FILE IS EXISTING")
+            elseif strcomp(@buf, @"FILE NOT EXISTING")
+                commandResultCode := RESULT_FILE_NOT_EXISTING
+                inWaitingCompleted := true
+                debug("Filesystem error: FILE NOT EXISTING")
+            elseif strcomp(@buf, @"DIRECTORY IS EXISTED")
+                commandResultCode := RESULT_DIR_EXISTED
+                inWaitingCompleted := true
+                debug("Filesystem error: DIRECTORY IS EXISTED")
+            elseif strcomp(@buf, @"DIRECTORY NOT EXISTED")
+                commandResultCode := RESULT_DIR_NOT_EXISTED
+                inWaitingCompleted := true
+                debug("Filesystem error: DIRECTORY NOT EXISTED")
+            elseif strcomp(@buf, @"FORBID CREATE DIRECTORY UNDER C:/") ' TODO: is this the real error message, the docs are confusing
+                commandResultCode := RESULT_FORBID_CREATE_DIR_UNDER_C
+                inWaitingCompleted := true
+                debug("Filesystem error: FORBID CREATE DIRECTORY UNDER C:/")
+            elseif strcomp(@buf, @"FORBID DELETE DIRECTORY")
+                commandResultCode := RESULT_FORBID_DELETE_DIR
+                inWaitingCompleted := true
+                debug("Filesystem error: FORBID DELETE DIRECTORY")
+            elseif strcomp(@buf, @"INVALID PATH NAME")
+                commandResultCode := RESULT_INVALID_PATH_NAME
+                inWaitingCompleted := true
+                debug("Filesystem error: INVALID PATH NAME")
+            elseif strcomp(@buf, @"INVALID FILE NAME")
+                commandResultCode := RESULT_INVALID_FILE_NAME
+                inWaitingCompleted := true
+                debug("Filesystem error: INVALID FILE NAME")
+            elseif strcomp(@buf, @"SD CARD HAVE NO ENOUGH MEMORY")
+                commandResultCode := RESULT_SD_NO_MEMORY
+                inWaitingCompleted := true
+                debug("Filesystem error: SD CARD HAVE NO ENOUGH MEMORY")
+            elseif strcomp(@buf, @"EFS HAVE NO ENOUGH MEMORY")
+                commandResultCode := RESULT_EFS_NO_MEMORY
+                inWaitingCompleted := true
+                debug("Filesystem error: EFS HAVE NO ENOUGH MEMORY")
+            elseif strcomp(@buf, @"FILE CREATE ERROR")
+                commandResultCode := RESULT_FILE_CREATE_ERROR
+                inWaitingCompleted := true
+                debug("Filesystem error: FILE CREATE ERROR")
+            elseif strcomp(@buf, @"READ FILE ERROR")
+                commandResultCode := RESULT_READ_FILE_ERROR
+                inWaitingCompleted := true
+                debug("Filesystem error: READ FILE ERROR")
+            elseif strcomp(@buf, @"WRITE FILE ERROR")
+                commandResultCode := RESULT_WRITE_FILE_ERROR
+                inWaitingCompleted := true
+                debug("Filesystem error: WRITE FILE ERROR")
             elseif inWaitingCompleted == false
                 appendResponse(@buf)
             else
@@ -1097,7 +1166,7 @@ PUB fsRename(pOld, pNew) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
     r := runCommand(@tmp)
 
-PUB fsGetAttrs(path, pAttrs, dbg) : r | tmp[128], resp[128], addr, sz
+PUB fsGetAttrs(path, pAttrs) : r | tmp[128], resp[128], addr, sz
     str.sprintf1(@tmp, @"AT+FSATTRI=%s\000", path)
     r := runCommandAndGetResponse(@tmp, @resp, 128)
     ' example response per docs: +FSATTRI: 8604, 2008/04/28 10:24:46 Tue

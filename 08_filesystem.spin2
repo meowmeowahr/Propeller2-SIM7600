@@ -128,7 +128,7 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs
     elseif str.startswith(p_input, @"rename ")
         r := doRename(p_input + 7)
     elseif str.startswith(p_input, @"info ")
-        modem.fsGetAttrs(p_input + 5, @attrs, @term.str)
+        modem.fsGetAttrs(p_input + 5, @attrs)
         term.str(@"Size: ")
         term.dec(attrs.sz)
         term.str(string(" bytes",10,13,"Date: "))
