@@ -13,9 +13,8 @@
 '' =================================================================================================
 
 CON
-    debug_main
     _CLKFREQ  = 200_000_000
-
+    debug_main
     BR_TERM   = 230_400                                             ' terminal baud rate
 
 CON { app io pins }
@@ -64,10 +63,9 @@ PUB main() | pos, c
     term.rxflush()
     term.RX()
 
-    term.str(@"Modem starting.")
+    term.str(@"Modem starting")
     ' Wait until modem is ready
     repeat
-        waitms(1000)
         term.TX(".")
         if modem.isReady()
             term.TX(10)
@@ -76,6 +74,7 @@ PUB main() | pos, c
             term.TX(10)
             term.TX(13)
             quit
+        waitms(1000)
 
     modem.fsPwd(@cwd, 128)
     term.TX("[")
