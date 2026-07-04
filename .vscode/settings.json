@@ -87,7 +87,7 @@
     "-FIFO",
     "8192",
     "-FLASH",
-    "-pP7d5n9i1"
+    "-p/dev/ttyUSB0"
   ],
   "spin2.optionsBuild": [
     "-2",
@@ -182,5 +182,5 @@
     "zstr"
   ],
   "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin",
-  "spin2.serialPort": "P7d5n9i1"
+  "spin2.serialPort": "/dev/ttyUSB0"
 }

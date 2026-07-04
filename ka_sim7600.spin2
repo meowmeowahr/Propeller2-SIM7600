@@ -103,6 +103,14 @@ VAR
     BYTE    mqttStartResult
     WORD    mqttConnectResult
 
+    ' FSLS streaming globals
+    BYTE    fsLsState                                               ' 0=inactive, 1=dirs, 2=files
+    LONG    fsLsFilesPtr                                            ' current write position for files
+    LONG    fsLsDirsPtr                                             ' current write position for directories
+    LONG    fsLsFilesMax                                            ' max bytes remaining for files
+    LONG    fsLsDirsMax                                             ' max bytes remaining for directories
+    BYTE    fsLsOverflow                                            ' overflow flag
+
 PUB null()
 ' this is not a top-level object
 
@@ -146,6 +154,14 @@ PUB start(rxPin, txPin, dtrPin, rstPin, baud, doReset, pRxBuffer, rxBufferSize, 
     mqttConnectResult := $FF
 
     mqttStartResult := 255
+
+    ' Initialize FSLS streaming globals
+    fsLsState := 0
+    fsLsFilesPtr := 0
+    fsLsDirsPtr := 0
+    fsLsFilesMax := 0
+    fsLsDirsMax := 0
+    fsLsOverflow := 0
 
 
 PUB stop()
@@ -568,6 +584,39 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
             fifoRx.ringBufferReadStr(@buf, MAX_LINE_LENGTH)
             debug("RX: ", zstr(@buf))
 
+            ' FSLS is waiting on data
+            if fsLsState > 0
+                if str.startswith(@buf, @"+FSLS: SUBDIRECTORIES:")
+                    fsLsState := 2
+                elseif str.startswith(@buf, @"+FSLS: FILES:")
+                    fsLsState := 3
+                    BYTE[fsLsDirsPtr + strsize(fsLsDirsPtr)-1] := 0
+                elseif str.startswith(@buf, @"OK")
+                    fsLsState := 0
+                    inWaitingCompleted := true
+                    BYTE[fsLsFilesPtr + strsize(fsLsFilesPtr)-1] := 0
+                else
+                    len := 0
+                    repeat while (BYTE[@buf + len] <> 0) AND (BYTE[@buf + len] <> 13) AND (BYTE[@buf + len] <> 10)
+                        len++
+                    if fsLsState == 2
+                        if len + 2 <= fsLsDirsMax
+                            bytemove(fsLsDirsPtr, @buf, len)
+                            BYTE[fsLsDirsPtr + len] := 255
+                            fsLsDirsPtr += len + 1
+                            fsLsDirsMax -= len + 1
+                        else
+                            fsLsOverflow := 1
+                    elseif fsLsState == 3
+                        if len + 2 <= fsLsFilesMax
+                            bytemove(fsLsFilesPtr, @buf, len)
+                            BYTE[fsLsFilesPtr + len] := 255
+                            fsLsFilesPtr += len + 1
+                            fsLsFilesMax -= len + 1
+                        else
+                            fsLsOverflow := 1
+                next
+                
             ' urcs
             if strcomp(@buf, @"RDY")
                 markModemReady()
@@ -1012,9 +1061,16 @@ PUB fsMkdir(path) : r | tmp[128]
     str.sprintf1(@tmp, @"AT+FSMKDIR=%s\000", path)
     r := runCommand(@tmp)
 
+
 PUB fsRmdir(path) : r | tmp[128]
     str.sprintf1(@tmp, @"AT+FSRMDIR=%s\000", path)
     r := runCommand(@tmp)
+
+
+PUB fsDel(path) : r | tmp[128]
+    str.sprintf1(@tmp, @"AT+FSDEL=%s\000", path)
+    r := runCommand(@tmp)
+
 
 PUB fsFileCount() : r | tmp[128], addr
 
@@ -1044,3 +1100,22 @@ PUB fsSubdirectoryCount() : r | tmp[128], addr
         addr++
 
     return -1                                           ' "SUBDIRECTORIES:" not found in response
+
+
+PUB fsLs(p_files, p_dirs, maxFilesBytes, maxDirsBytes) : r
+    fsLsState := 1
+    fsLsFilesPtr := p_files
+    fsLsDirsPtr := p_dirs
+    fsLsFilesMax := maxFilesBytes
+    fsLsDirsMax := maxDirsBytes
+    fsLsOverflow := 0
+
+    sendCommand(@"AT+FSLS")
+    repeat while isCommandRunning()
+    repeat while fsLsState > 0
+
+    if fsLsOverflow
+        return -1
+
+    r := getCommandResult()
+    return r

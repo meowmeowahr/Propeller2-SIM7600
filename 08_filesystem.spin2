@@ -27,11 +27,14 @@ CON { app io pins }
 
 CON
 
-    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
-    MODEM_RESET      = 0                                            ' Reset modem on startup, 0 = no reset, 1 = reset
+    MODEM_BAUD             = 115_200                                ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_RESET            = 0                                      ' Reset modem on startup, 0 = no reset, 1 = reset
 
-    RX_BUFFER_SIZE   = 4096
-    URC_BUFFER_SIZE  = 1024
+    RX_BUFFER_SIZE         = 4096
+    URC_BUFFER_SIZE        = 1024
+
+    DIRECTORY_BUFFER_SIZE  = 512
+    FILE_BUFFER_SIZE       = 512
 
 OBJ
 
@@ -45,9 +48,12 @@ VAR
     BYTE    rxBuffer[RX_BUFFER_SIZE]
     BYTE    urcBuffer[URC_BUFFER_SIZE]
 
-    byte    cwd[128]
-    byte    input[128]
-    byte    returnCode
+    BYTE    cwd[128]
+    BYTE    input[128]
+    BYTE    returnCode
+
+    BYTE    listFileBuffer[FILE_BUFFER_SIZE]
+    BYTE    listDirectoryBuffer[DIRECTORY_BUFFER_SIZE]
 
 PUB main() | pos, c
 
@@ -56,13 +62,13 @@ PUB main() | pos, c
 
     ' wait for terminal input
     term.rxflush()
-    term.rx()
+    term.RX()
 
     term.str(@"Modem starting.")
     ' Wait until modem is ready
     repeat
         waitms(1000)
-        term.tx(".")
+        term.TX(".")
         if modem.isReady()
             term.TX(10)
             term.TX(13)
@@ -70,12 +76,12 @@ PUB main() | pos, c
             term.TX(10)
             term.TX(13)
             quit
-    
+
     modem.fsPwd(@cwd, 128)
-    term.tx("[")
+    term.TX("[")
     term.dec(returnCode)
-    term.tx("]")
-    term.tx(" ")
+    term.TX("]")
+    term.TX(" ")
     term.str(@cwd)
     term.str(@"> ")
     repeat
@@ -90,22 +96,23 @@ PUB main() | pos, c
                 returnCode := processCommand(@input)
                 pos := 0
                 modem.fsPwd(@cwd, 128)
-                term.tx("[")
+                term.TX("[")
                 term.dec(returnCode)
-                term.tx("]")
-                term.tx(" ")
+                term.TX("]")
+                term.TX(" ")
                 term.str(@cwd)
                 term.str(@"> ")
             127:
                 if pos > 0
                     pos -= 1
-                    term.tx(term.BKSP)
-                    term.tx(32)
-                    term.tx(term.BKSP)
+                    term.TX(term.BKSP)
+                    term.TX(32)
+                    term.TX(term.BKSP)
             other:
                 input[pos] := c
                 pos += 1
-                term.tx(c)
+                term.TX(c)
+
 
 PUB processCommand(p_input) : r | ct
     if str.startswith(p_input, @"cd ")
@@ -114,14 +121,16 @@ PUB processCommand(p_input) : r | ct
         r := modem.fsMkdir(p_input + 6)
     elseif str.startswith(p_input, @"rmdir ")
         r := modem.fsRmdir(p_input + 6)
+    elseif str.startswith(p_input, @"rm ")
+        r := modem.fsDel(p_input + 3)
     elseif strcomp(p_input, @"fc")
         ct := modem.fsFileCount()
         if ct == -1
             return 1
         term.dec(ct)
         term.str(@" files")
-        term.tx(10)
-        term.tx(13)
+        term.TX(10)
+        term.TX(13)
         return 0
     elseif strcomp(p_input, @"sdc")
         ct := modem.fsSubdirectoryCount()
@@ -129,13 +138,38 @@ PUB processCommand(p_input) : r | ct
             return 1
         term.dec(ct)
         term.str(@" directories")
-        term.tx(10)
-        term.tx(13)
+        term.TX(10)
+        term.TX(13)
+        return 0
+    elseif strcomp(p_input, @"ls")
+        bytefill(@listDirectoryBuffer, 0, DIRECTORY_BUFFER_SIZE)
+        bytefill(@listFileBuffer, 0, FILE_BUFFER_SIZE)
+        r := modem.fsLs(@listFileBuffer, @listDirectoryBuffer, 512, 512)
+        if r <> modem.RESULT_OK
+            return r
+        printEntryList("d", @listDirectoryBuffer)
+        printEntryList("f", @listFileBuffer)
         return 0
     elseif str.isempty(p_input)
         r := returnCode
     else
         r := 2
+
+
+PRI printEntryList(type, pBuf) | addr
+'' Walk a 255-separated, 0-terminated list of entries, printing one per line
+
+    addr := pBuf
+    repeat while (BYTE[addr] <> 0)
+        term.TX(type)
+        term.TX(" ")
+        repeat while (BYTE[addr] <> 255) AND (BYTE[addr] <> 0)
+            term.TX(BYTE[addr])
+            addr++
+        term.TX(10)
+        term.TX(13)
+        if BYTE[addr] == 255
+            addr++
 
 CON { license }
 
