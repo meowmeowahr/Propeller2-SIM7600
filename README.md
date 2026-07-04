@@ -116,15 +116,6 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [ ] Raw TCP
 * [ ] Raw UDP
 
-## Resources
-
-Useful documentation for the SIM7600
-
-* [SIMCOM Product Page](https://www.simcom.com/product/SIM7600X.html)
-* [Waveshare Module Wiki](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
-* [Waveshare Module Schematic](https://www.waveshare.com/w/upload/8/89/SIM7600X_4G_Module.pdf)
-* [MQTT(S) Application Note](https://files.waveshare.com/upload/5/50/SIM7500_SIM7600_SIM7800_Series_MQTT_Application_Note_V2.00.pdf)
-
 ## Development
 
 This driver is tested using [FlexSpin](https://github.com/totalspectrum/flexprop/). It should still work in PNut.
@@ -145,6 +136,16 @@ I have been using a self-hosted [EMQX Enterprise](https://github.com/emqx/emqx) 
 A desktop client is required for subscribing and publishing to the topics that the P2 is listening on. Some brokers such as EMQX have a builtin web UI that allows you to interact and monitor traffic.
 
 I used [MQTTX](https://mqttx.app/) for testing. It should work with any MQTT broker.
+
+## Resources
+
+Useful documentation for the SIM7600
+
+* [SIMCOM Product Page](https://www.simcom.com/product/SIM7600X.html)
+* [Waveshare Module Wiki](https://www.waveshare.com/wiki/SIM7600X_4G_Module)
+* [Waveshare Module Schematic](https://www.waveshare.com/w/upload/8/89/SIM7600X_4G_Module.pdf)
+* [MQTT(S) Application Note](https://files.waveshare.com/upload/5/50/SIM7500_SIM7600_SIM7800_Series_MQTT_Application_Note_V2.00.pdf)
+* [Hardware Design Guide](https://media.digikey.com/pdf/Data%20Sheets/SIMCom%20PDFs/SIM7600_Series_Hardware_Design.pdf)
 
 ## License
 

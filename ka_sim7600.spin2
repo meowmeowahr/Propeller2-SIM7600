@@ -82,7 +82,6 @@ VAR
 
     ' MQTT Publish Streaming
     BYTE    mqttPublishClientNum
-    WORD    mqttPublishTopicLen
     WORD    mqttPublishPayloadLen
     WORD    mqttPublishPayloadSent
     BYTE    mqttPublishQos
@@ -922,7 +921,6 @@ PUB mqttPublishStreamByte(byteValue) : remaining | r
         return mqttPublishPayloadLen - mqttPublishPayloadSent
     else
         ' Buffer full - caller should wait and try again
-        debug("full")
         return -1
 
 
@@ -966,13 +964,7 @@ PUB mqttReleaseClient(clientNum) : r | tmp[64]
 
 
 PUB definePdpContext(cid, pAPN) : r | tmp[128], args[6]
-    args[0] := cid
-    args[1] := 34
-    args[2] := 34
-    args[3] := 34
-    args[4] := pAPN
-    args[5] := 34
-    str.sprintf(@tmp, @"AT+CGDCONT=%d,%cIP%c,%c%s%c\000", @args)
+    str.sprintf6(@tmp, @"AT+CGDCONT=%d,%cIP%c,%c%s%c\000", cid, 34, 34, 34, pAPN, 34)
     r := runCommand(@tmp)
 
 

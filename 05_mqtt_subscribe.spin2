@@ -8,7 +8,7 @@
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 28 JUN 2026
-''   Updated.... 28 JUN 2026
+''   Updated.... 03 JUL 2026
 ''
 '' =================================================================================================
 
@@ -16,12 +16,28 @@ CON
 
     _CLKFREQ  = 200_000_000
 
-    RX        = 1
-    TX        = 0
-    DTR       = 2
-    RST       = 3
+CON { app io pins }
+
+    RX   = 1
+    TX   = 0
+    DTR  = 2
+    RST  = 3
+
+DAT { network settings }
+
+    APN                 BYTE                    "hologram",0                      ' Cellular APN
+    BROKER_ADDRESS      BYTE                    "tcp://emqx.kevinbot.net:1883",0  ' Your MQTT broker address, this example does not support SSL/TLS
+
+    CLIENT_ID           BYTE                    "p2_sim7600_client",0             ' MQTT client id, visible to the broker
+    SUBSCRIBE_TOPIC     BYTE                    "propeller2/io/56",0              ' Topic to subscribe to
+
+    WILL_TOPIC          BYTE                    "p2_sim7600_client/will",0        ' Topic for the will message
+    WILL_MSG            BYTE                    "offline",0                       ' Will message to be sent if the client disconnects unexpectedly
 
 CON
+
+    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_RESET      = 1                                            ' Reset modem on startup, 0 = no reset, 1 = reset
 
     RX_BUFFER_SIZE   = 4096
     URC_BUFFER_SIZE  = 4096
@@ -41,7 +57,7 @@ VAR
     BYTE    urcBuffer[URC_BUFFER_SIZE]
 
 PUB main() | status
-    modem.start(RX, TX, DTR, RST, 115_200, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    modem.start(RX, TX, DTR, RST, MODEM_BAUD, MODEM_RESET, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' leds off
     pinl(56)
@@ -56,7 +72,7 @@ PUB main() | status
             quit
 
     ' Configure APN
-    status := modem.definePdpContext(1, string("hologram"))
+    status := modem.definePdpContext(1, @APN)
     debug("definePdpContext: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to set APN")
@@ -77,21 +93,21 @@ PUB main() | status
         return
 
     ' acquire client 0
-    status := modem.mqttAcquireClient(0, string("p2_sim7600_client"))
+    status := modem.mqttAcquireClient(0, @CLIENT_ID)
     debug("mqttAcquireClient: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to acquire client")
         return
 
     ' will topic
-    status := modem.mqttWillTopic(0, string("p2_sim7600_client/will"))
+    status := modem.mqttWillTopic(0, @WILL_TOPIC)
     debug("mqttWillTopic: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to set will topic")
         return
 
     ' will msg
-    status := modem.mqttWillMsg(0, string("offline"), 1)
+    status := modem.mqttWillMsg(0, @WILL_MSG, 1)
     debug("mqttWillMsg: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to set will msg")
@@ -99,14 +115,14 @@ PUB main() | status
 
     ' connect
     ' REPLACE THE MQTT ADDRESS WITH YOUR OWN SERVER
-    status := modem.mqttConnect(0, string("tcp://emqx.kevinbot.net:1883"), 60, 1, secrets.mqttUsername(), secrets.mqttPassword())
+    status := modem.mqttConnect(0, @BROKER_ADDRESS, 60, 1, secrets.mqttUsername(), secrets.mqttPassword())
     debug("mqttConnect: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to connect to broker")
         return
 
     ' Subscribe to Topic
-    status := modem.mqttSubscribe(0, string("propeller2/io/56"), 0)
+    status := modem.mqttSubscribe(0, @SUBSCRIBE_TOPIC, 0)
     debug("mqttSubscribe: ", sdec(status))
     if status <> modem.RESULT_OK
         debug("Failed to subscribe to topic")
@@ -119,7 +135,7 @@ PUB main() | status
             modem.getInWaitingMqttTopic(@topicBuf, 128)
             modem.getInWaitingMqttPayload(@payloadBuf, 512)
             modem.popInWaitingUrc()
-            if strcomp(@topicBuf, @"propeller2/io/56")
+            if strcomp(@topicBuf, @SUBSCRIBE_TOPIC)
                 case BYTE[@payloadBuf]
                     "t": pint(56)
                     "h": pinh(56)
