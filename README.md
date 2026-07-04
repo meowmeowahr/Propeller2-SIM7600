@@ -26,6 +26,8 @@ The driver may be compatible with the SIM7500 modem, but hasn't been tested with
 
 ## Examples
 
+### Pinout
+
 All examples use the following pinout:
 
 | Modem | P2 |
@@ -42,6 +44,15 @@ All examples use 115200 baud for the modem with 4KB RX and URC buffers.
 
 > [!NOTE]
 > The DTR pin is not currently used, but may be required in the future for advanced sleep features.
+
+### Secrets
+
+The MQTT examples require configuring MQTT authentication.
+
+Copy/rename the [00_secrets.template.spin2](00_secrets.template.spin2) file to `00_secrets.spin2`, and add your username/password
+
+> [!WARNING]
+> Many of these examples do not use SSL/TLS. Do not reuse passwords. Use MQTTS with SSL/TLS in production.
 
 ### [01_modem_info.spin2](01_modem_info.spin2)
 

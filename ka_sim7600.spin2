@@ -29,6 +29,27 @@ CON
 
     #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
 
+CON
+
+    STRUCT DATE(WORD year, BYTE month, BYTE day, BYTE hour, BYTE min, BYTE sec, WORD weekday)
+    STRUCT fileAttrs(BYTE rc, LONG sz, DATE creation)
+
+DAT
+
+    Sunday      BYTE    "Sun",0
+    Monday      BYTE    "Mon",0
+    Tuesday     BYTE    "Tue",0
+    Wednesday   BYTE    "Wed",0
+    Thursday    BYTE    "Thu",0
+    Friday      BYTE    "Fri",0
+
+    Weekdays    WORD    @Sunday
+                WORD    @Monday
+                WORD    @Tuesday
+                WORD    @Wednesday
+                WORD    @Thursday
+                WORD    @Friday
+
 OBJ
     ser         : "jm_fullduplexserial"
     nstr        : "jm_nstr"
@@ -540,15 +561,15 @@ PRI markModemReady()
     onConnect()
 
 
-PRI appendResponse(buf) | len, responseLen
+PRI appendResponse(b) | len, responseLen
 
-    len := strsize(buf)
+    len := strsize(b)
 
     if len + 2 >= MAX_RESPONSE
         debug("ERR: response overflow")
         return
 
-    bytemove(@responseBuffer + responseLen, buf, len)
+    bytemove(@responseBuffer + responseLen, b, len)
     responseLen += len
 
     BYTE[responseBuffer][responseLen++] := 13
@@ -1075,6 +1096,82 @@ PUB fsDel(path) : r | tmp[128]
 PUB fsRename(pOld, pNew) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
     r := runCommand(@tmp)
+
+PUB fsGetAttrs(path, pAttrs, dbg) : r | tmp[128], resp[128], addr, sz
+    str.sprintf1(@tmp, @"AT+FSATTRI=%s\000", path)
+    r := runCommandAndGetResponse(@tmp, @resp, 128)
+    ' example response per docs: +FSATTRI: 8604, 2008/04/28 10:24:46 Tue
+    if r <> RESULT_OK
+        return r
+    
+    addr := @resp
+    sz := str.atoi(addr + 9)
+
+    fileAttrs[pAttrs].rc := r
+    fileAttrs[pAttrs].sz := sz
+    
+    ' parse date
+    repeat while BYTE[addr] <> ","
+        addr++
+    addr++
+
+    ' we're at YYYY
+    fileAttrs[pAttrs].creation.year := str.atoi(addr)
+
+    repeat while BYTE[addr] <> "/"
+        addr++
+    addr++
+
+    ' we're at MM
+    fileAttrs[pAttrs].creation.month := str.atoi(addr)
+
+    repeat while BYTE[addr] <> "/"
+        addr++
+    addr++
+
+    ' we're at DD
+    fileAttrs[pAttrs].creation.day := str.atoi(addr)
+
+    repeat while BYTE[addr] <> " "
+        addr++
+    addr++
+
+    ' we're at HH
+    fileAttrs[pAttrs].creation.hour := str.atoi(addr)
+
+    repeat while BYTE[addr] <> ":"
+        addr++
+    addr++
+
+    ' we're at MM
+    fileAttrs[pAttrs].creation.min := str.atoi(addr)
+
+    repeat while BYTE[addr] <> ":"
+        addr++
+    addr++
+
+    ' we're at SS
+    fileAttrs[pAttrs].creation.sec := str.atoi(addr)
+
+    repeat while BYTE[addr] <> " "
+        addr++
+    addr++
+
+    ' we're at Week
+    if strcomp(addr, @Sunday)
+        fileAttrs[pAttrs].creation.weekday := @Sunday
+    elseif strcomp(addr, @Monday)
+        fileAttrs[pAttrs].creation.weekday := @Monday
+    elseif strcomp(addr, @Tuesday)
+        fileAttrs[pAttrs].creation.weekday := @Tuesday
+    elseif strcomp(addr, @Wednesday)
+        fileAttrs[pAttrs].creation.weekday := @Wednesday
+    elseif strcomp(addr, @Thursday)
+        fileAttrs[pAttrs].creation.weekday := @Thursday
+    elseif strcomp(addr, @Friday)
+        fileAttrs[pAttrs].creation.weekday := @Friday
+    else
+        fileAttrs[pAttrs].creation.weekday := 0   ' should never happen, maybe there are noisy comms?
 
 PUB fsFileCount() : r | tmp[128], addr
 

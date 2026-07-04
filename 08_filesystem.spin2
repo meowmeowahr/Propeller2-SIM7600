@@ -14,7 +14,7 @@
 
 CON
     _CLKFREQ  = 200_000_000
-    debug_main
+
     BR_TERM   = 230_400                                             ' terminal baud rate
 
 CON { app io pins }
@@ -40,6 +40,7 @@ OBJ
     modem       : "ka_sim7600"
     term        : "jm_fullduplexserial"
     str         : "string"
+    ansi        : "jm_ansi"
 
 VAR
 
@@ -76,13 +77,7 @@ PUB main() | pos, c
             quit
         waitms(1000)
 
-    modem.fsPwd(@cwd, 128)
-    term.TX("[")
-    term.dec(returnCode)
-    term.TX("]")
-    term.TX(" ")
-    term.str(@cwd)
-    term.str(@"> ")
+    txPrompt(@cwd, returnCode)
     repeat
         c := term.rxcheck()
         case c
@@ -94,14 +89,8 @@ PUB main() | pos, c
                 term.TX(13)
                 returnCode := processCommand(@input)
                 pos := 0
-                modem.fsPwd(@cwd, 128)
-                term.TX("[")
-                term.dec(returnCode)
-                term.TX("]")
-                term.TX(" ")
-                term.str(@cwd)
-                term.str(@"> ")
-            127:
+                txPrompt(@cwd, returnCode)
+            127:                                        ' DEL
                 if pos > 0
                     pos -= 1
                     term.TX(term.BKSP)
@@ -113,7 +102,21 @@ PUB main() | pos, c
                 term.TX(c)
 
 
-PUB processCommand(p_input) : r | ct
+PUB txPrompt(p_cwd, rc)
+    modem.fsPwd(@cwd, 128)
+    term.str(ansi.fgnd(ansi.MAGENTA))
+    term.TX("[")
+    term.dec(rc)
+    term.TX("]")
+    term.str(ansi.normal())
+    term.TX(" ")
+    term.str(p_cwd)
+    term.str(ansi.fgnd(ansi.GREEN))
+    term.str(@"> ")
+    term.str(ansi.normal())
+
+
+PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs
     if str.startswith(p_input, @"cd ")
         r := modem.fsCd(p_input + 3)
     elseif str.startswith(p_input, @"mkdir ")
@@ -124,6 +127,26 @@ PUB processCommand(p_input) : r | ct
         r := modem.fsDel(p_input + 3)
     elseif str.startswith(p_input, @"rename ")
         r := doRename(p_input + 7)
+    elseif str.startswith(p_input, @"info ")
+        modem.fsGetAttrs(p_input + 5, @attrs, @term.str)
+        term.str(@"Size: ")
+        term.dec(attrs.sz)
+        term.str(string(" bytes",10,13,"Date: "))
+        term.dec(attrs.creation.month)
+        term.TX("/")
+        term.dec(attrs.creation.day)
+        term.TX("/")
+        term.dec(attrs.creation.year)
+        term.TX(" ")
+        term.dec(attrs.creation.hour)
+        term.TX(":")
+        term.dec(attrs.creation.min)
+        term.TX(":")
+        term.dec(attrs.creation.sec)
+        term.TX(" ")
+        term.str(attrs.creation.weekday)
+        term.TX(10)
+        term.TX(13)
     elseif strcomp(p_input, @"fc")
         ct := modem.fsFileCount()
         if ct == -1
@@ -156,27 +179,28 @@ PUB processCommand(p_input) : r | ct
     else
         r := 2
 
+
 PRI doRename(pArgs) : r | addr
-'' pArgs points at "<from> <to>" (the part after "mv "). Split on the first
-'' space, then call fsRename(from, to).
+'' pArgs points at "<from> <to>". Split on the first space, then call fsRename(from, to).
 
     addr := pArgs
-    repeat while (BYTE[addr] <> " ") and (BYTE[addr] <> 0)
+    repeat while (BYTE[addr] <> " ") AND (BYTE[addr] <> 0)
         addr++
 
     if BYTE[addr] <> " "
-        return 2                            ' malformed - no second argument
+        return 2                                        ' malformed - no second argument
 
-    BYTE[addr] := 0                          ' terminate "from" in place
-    addr++                                    ' skip the space
+    BYTE[addr] := 0                                     ' terminate "from" in place
+    addr++                                              ' skip the space
 
-    repeat while (BYTE[addr] == " ")         ' tolerate extra spaces before "to"
+    repeat while (BYTE[addr] == " ")                    ' tolerate extra spaces before "to"
         addr++
 
     if BYTE[addr] == 0
-        return 2                            ' malformed - "to" missing/empty
+        return 2                                        ' malformed - "to" missing/empty
 
     r := modem.fsRename(pArgs, addr)
+
 
 PRI printEntryList(type, pBuf) | addr
 '' Walk a 255-separated, 0-terminated list of entries, printing one per line
