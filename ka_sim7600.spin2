@@ -147,17 +147,17 @@ PUB null()
 ' this is not a top-level object
 
 
-' PRI clearToRx()
-'     if invRts
-'         pinh(rtsP)
-'     else
-'         pinl(rtsP)
+PRI clearToRx()
+    if invRts
+        pinh(rtsP)
+    else
+        pinl(rtsP)
 
-' PRI unclearToRx()
-'     if invRts
-'         pinl(rtsP)
-'     else
-'         pinh(rtsP)
+PRI unclearToRx()
+    if invRts
+        pinl(rtsP)
+    else
+        pinh(rtsP)
 
 PUB start(rxPin, txPin, rtsPin, dtrPin, rstPin, baud, doReset, invertRts, pRxBuffer, rxBufferSize, pUrcBuffer, urcBufferSize)
     rtsP := rtsPin
@@ -168,10 +168,10 @@ PUB start(rxPin, txPin, rtsPin, dtrPin, rstPin, baud, doReset, invertRts, pRxBuf
     baudRate := baud
     invRts := invertRts
     
-    debug(udec(baudRate), udec(rxP), udec(txP), udec(rtsP), udec(dtrP), udec(rstP))
+    ser.start(rxP, txP, %0000, baudRate)
 
     pinl(dtrP)
-    ' clearToRx()
+    clearToRx()
 
     doInitialReset := doReset
     modemIsReady, smsIsReady, phonebookIsReady, simIsReady := false, false, false, false
@@ -606,23 +606,18 @@ PRI appendResponse(b) | len, responseLen
 
 
 PRI modemCog() | inChar, addr, len, clientNumFromUrc
-    DEBUG("here")
     if doInitialReset
         hardReset()
     else
         sendCommand(@"AT")
-    DEBUG("here")
     repeat
         repeat
             inChar := ser.rxCheck()
-            if inChar <>-1
-                debug(lstr(inChar,1))
             case inChar
                 -1:                                                             ' no data
                     quit
                 10, 13:
                     fifoRx.ringBufferCommit()
-                    DEBUG("here")
                     quit                                                        ' quit to handle echo in case ">" is the next char
                 ">":
                     if inWaitingForPrompt
