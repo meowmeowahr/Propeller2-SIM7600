@@ -22,8 +22,11 @@ CON { app io pins }
     TX   = 0
     DTR  = 2
     RST  = 3
+    RTS  = 4                                                        ' connect to modem CTS pin
 
 CON
+
+    INVERT_RTS       = 1                                            ' Invert the RTS pin (CTS on modem side) so that HIGH allows the module to transmit
 
     RX_BUFFER_SIZE   = 4096
     URC_BUFFER_SIZE  = 4096
@@ -49,7 +52,7 @@ OBJ
     modem       : "ka_sim7600"
 
 PUB main() | status, buf[128]
-    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' force device reset
+    modem.start(RX, TX, DTR, RST, OLD_BAUD, 1, INVERT_RTS, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' force device reset
 
     ' Wait until modem is ready
     repeat
@@ -66,7 +69,7 @@ PUB main() | status, buf[128]
     debug("setPermanentBaudRate status ", udec(status))
 
     modem.stop()
-    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' must reboot to apply
+    modem.start(RX, TX, DTR, RST, NEW_BAUD, 1, INVERT_RTS, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)  ' must reboot to apply
 
     ' Wait until modem is ready
     repeat

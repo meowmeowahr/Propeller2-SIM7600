@@ -15,11 +15,11 @@
     }
   },
   "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
-  "spin2.fNameTopLevel": "08_filesystem.spin2",
-  "spin2.optionsBinaryFname": "08_filesystem.binary",
+  "spin2.fNameTopLevel": "99_mqtt_dht.spin2",
+  "spin2.optionsBinaryFname": "99_mqtt_dht.binary",
   "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
   "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
-  "spinExtension.toolchain.optionsCompile.enableDebug": false,
+  "spinExtension.toolchain.optionsCompile.enableDebug": true,
   "actionButtons": {
     "reloadButton": "$(debug-gripper)",
     "commands": [
@@ -82,12 +82,13 @@
   "spinExtension.elasticTabstops.choice": "IronSheep",
   "spinExtension.toolchain.optionsDownload.enableFlash": true,
   "spin2.optionsLoader": [
+    "-t",
     "-b2000000",
     "-SINGLE",
     "-FIFO",
     "8192",
     "-FLASH",
-    "-p/dev/ttyUSB0"
+    "-p/dev/ttyUSB1"
   ],
   "spin2.optionsBuild": [
     "-2",
@@ -95,6 +96,7 @@
     "-Wmax-errors=99",
     "--charset=parallax",
     "--sizes",
+    "-gbrk",
     "--compress",
     "-I",
     "/"
@@ -188,5 +190,5 @@
     "zstr"
   ],
   "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin",
-  "spin2.serialPort": "/dev/ttyUSB0"
+  "spin2.serialPort": "/dev/ttyUSB1"
 }

@@ -97,7 +97,7 @@ See [MQTT Development](#mqtt-development) for more information
 IoT data collection example using a DHT22 temperature/humidity sensor.
 Sends data at a fixed interval over MQTT.
 
-The example assumes that a DHT22 sensor is connected to pin 4, using 3.3v power.
+The example assumes that a DHT22 sensor is connected to pin 8, using 3.3v power.
 
 See [MQTT Development](#mqtt-development) for more information
 

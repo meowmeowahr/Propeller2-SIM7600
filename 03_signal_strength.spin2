@@ -22,11 +22,12 @@ CON { app io pins }
     TX   = 0
     DTR  = 2
     RST  = 3
+    RTS  = 4                                                        ' connect to modem CTS pin
 
 CON
 
     MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
-    MODEM_RESET      = 1                                            ' Reset modem on startup, 0 = no reset, 1 = reset
+    MODEM_OPTS       = %1001                                        ' 4-bit configuration for modem b1: initial reset, b2: inv rx, b3: inv tx, b4: int cts
 
     RX_BUFFER_SIZE   = 4096
     URC_BUFFER_SIZE  = 4096
@@ -43,7 +44,7 @@ VAR
     BYTE    urcBuffer[URC_BUFFER_SIZE]
 
 PUB main() | status, BYTE rssi, BYTE ber
-    modem.start(RX, TX, DTR, RST, MODEM_BAUD, MODEM_RESET, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    modem.start(RX, TX, RTS, DTR, RST, MODEM_BAUD, MODEM_OPTS, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' Wait until modem is ready
     repeat

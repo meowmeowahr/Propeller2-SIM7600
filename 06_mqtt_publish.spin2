@@ -18,10 +18,11 @@ CON
 
 CON { app io pins }
 
-    RX        = 1
-    TX        = 0
-    DTR       = 2
-    RST       = 3
+    RX   = 1
+    TX   = 0
+    DTR  = 2
+    RST  = 3
+    RTS  = 4                                                        ' connect to modem CTS pin
 
 DAT { network settings }
 
@@ -35,6 +36,8 @@ DAT { network settings }
     WILL_MSG        BYTE    "offline",0                             ' Will message to be sent if the client disconnects unexpectedly
 
 CON
+
+    INVERT_RTS       = 1                                            ' Invert the RTS pin (CTS on modem side) so that HIGH allows the module to transmit
 
     RX_BUFFER_SIZE   = 4096
     URC_BUFFER_SIZE  = 4096
@@ -52,7 +55,7 @@ VAR
     BYTE    urcBuffer[URC_BUFFER_SIZE]
 
 PUB main() | status, i
-    modem.start(RX, TX, DTR, RST, 115_200, 1, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    modem.start(RX, TX, RTS, DTR, RST, 115_200, 1, INVERT_RTS, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
 
     ' leds off
     pinl(56)
