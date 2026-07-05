@@ -1,5 +1,3 @@
-{Spin2_v53}
-
 '' =================================================================================================
 ''
 ''   File....... ka_ring_buffer.spin2
@@ -8,7 +6,7 @@
 ''               -- see below for terms of use
 ''   E-mail..... meowmeowahr@gmail.com
 ''   Started.... 04 JUN 2026
-''   Updated.... 30 JUN 2026
+''   Updated.... 05 JUL 2026
 ''
 '' =================================================================================================
 
@@ -47,8 +45,13 @@ PUB ringBufferPut(c)
         ' debug("frame_putc: new frame started at buf[", udec_(wip_start), "]")
 
     repeat while ringBufferMemFree() == 0
-        ' the queue is full
-        ringBufferDrop()
+        if frame_count > 0
+            ringBufferDrop()
+        else
+            ' No complete frames left, evict the oldest character from the WIP frame
+            buf_head := (buf_head + 1) & (ring_size - 1)
+            wip_start := buf_head
+            wip_len--
 
     BYTE[ring_buffer][buf_tail] := c
     buf_tail := (buf_tail + 1) & (ring_size - 1)
@@ -63,8 +66,13 @@ PUB ringBufferCommit() : ok
         return
 
     repeat while ringBufferMemFree() == 0
-        ' the queue is full, must make room for null terminator
-        ringBufferDrop()
+        if frame_count > 0
+            ringBufferDrop()
+        else
+            ' No complete frames left, evict the oldest character from the WIP frame
+            buf_head := (buf_head + 1) & (ring_size - 1)
+            wip_start := buf_head
+            wip_len--
 
     BYTE[ring_buffer][buf_tail] := 0                    ' null terminator
     buf_tail := (buf_tail + 1) & (ring_size - 1)

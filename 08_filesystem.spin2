@@ -60,24 +60,22 @@ VAR
 PUB main() | pos, c
 
     modem.start(RX, TX, RTS, DTR, RST, MODEM_BAUD, MODEM_RESET, INVERT_RTS, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
-    term.tstart(BR_TERM)
+    ' term.tstart(BR_TERM)
 
     ' wait for terminal input
-    term.rxflush()
-    term.RX()
+    ' term.rxflush()
+    ' term.RX()
 
     term.str(@"Modem starting")
     ' Wait until modem is ready
     repeat
         term.TX(".")
         if modem.isReady()
-            term.TX(10)
-            term.TX(13)
-            term.str(@"Modem ready")
-            term.TX(10)
-            term.TX(13)
+            term.str(string(10, 13, "Modem ready", 10, 13))
             quit
         waitms(1000)
+
+    modem.fsStartStreamingFile(@"c:/t.txt")
 
     txPrompt(@cwd, returnCode)
     repeat
@@ -129,6 +127,8 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs
         r := modem.fsDel(p_input + 3)
     elseif str.startswith(p_input, @"rename ")
         r := doRename(p_input + 7)
+    elseif str.startswith(p_input, @"rx ")
+        r := modem.fsStartStreamingFile(p_input + 3)
     elseif str.startswith(p_input, @"info ")
         modem.fsGetAttrs(p_input + 5, @attrs)
         term.str(@"Size: ")

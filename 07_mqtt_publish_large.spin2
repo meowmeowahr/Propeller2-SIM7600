@@ -123,9 +123,15 @@ PUB main() | status, i, bytesSent, byteVal, charByte, result
     i := 0
     repeat
         debug("Starting transmission #", sdec(i))
+        
+        status := modem.setMqttPublishTopic(0, @PUBLISH_TOPIC)
+        if status <> modem.RESULT_OK
+            debug("Failed to set topic")
+            repeat
+                waitct(1)
 
         ' Start MQTT publish stream
-        status := modem.startMqttPublishStream(0, @PUBLISH_TOPIC, 0, 0, 60, PAYLOAD_SIZE)
+        status := modem.startMqttPayloadStream(0, PAYLOAD_SIZE)
         if status <> modem.RESULT_OK
             debug("startMqttPublishStream failed: ", sdec(status))
             waitms(2000)
@@ -141,8 +147,8 @@ PUB main() | status, i, bytesSent, byteVal, charByte, result
 
             ' Send the byte via stream - retry if buffer full
             repeat
-                result := modem.mqttPublishStreamByte(charByte)
-                debug("Bytes remaining: ", udec(result))
+                result := modem.streamTxByte(charByte)
+                ' debug("Bytes remaining: ", udec(result))
                 if result >= 0
                     bytesSent++
                     quit
@@ -153,7 +159,7 @@ PUB main() | status, i, bytesSent, byteVal, charByte, result
         ' Check if all bytes were sent
         if bytesSent == PAYLOAD_SIZE
             debug("Successfully sent ", sdec(PAYLOAD_SIZE), " bytes via stream")
-            modem.mqttPublishStreamDone()
+            modem.mqttPublish(0, 0, 0, 60)
         else
             debug("Only sent ", sdec(bytesSent), " of ", sdec(PAYLOAD_SIZE), " bytes")
 
