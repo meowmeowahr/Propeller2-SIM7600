@@ -39,13 +39,40 @@ All examples use the following pinout:
 | CTS   | 4  |
 | RTS   | 5  |
 
-> [!NOTE]
-> Level shifting is not required, as the module operates at 3.3v logic levels. Ensure that `Vio` is not connected, if using the Waveshare board
-
 All examples use 115200 baud for the modem with 4KB RX and URC buffers.
 
 > [!NOTE]
+> Level shifting is not required on the Waveshare board, as the module operates at 3.3v logic levels. Ensure that `Vio` is not connected, if using the Waveshare board
+
+> [!NOTE]
 > The DTR pin is not currently used, but may be required in the future for advanced sleep features.
+
+#### Waveshare SIM7600G-H Modification
+
+My Waveshare board had an issue causing the CTS pin to be stuck low. I'm not sure if this was a defect with my board, or if I'm doing something wrong. Here is what I did to fix it. I bypassed the onboard TXB0108PWR level shifter, and used a pullup and NPN transistor on the CTS line. Note that the SIM7600 modem can only handle 1.8v inputs.
+
+> [!NOTE]
+> This requires setting the inverted CTS flag in the driver.
+
+The following parts are needed for the modification:
+
+* 2N222A or similar NPN signal transistor
+* 5.6k resistor
+* 7.5k resistor
+* X-ACTO knife for cutting traces
+* Soldering microscope recommended
+
+Traces View
+
+![Cut traces](docs/waveshare_cut_traces.png)
+
+Top View
+
+![Top View](docs/waveshare_mod_top.png)
+
+Side View
+
+![Side view](docs/waveshare_mod_side.png)
 
 ### Secrets
 
