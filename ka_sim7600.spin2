@@ -50,10 +50,13 @@ CON
 
     #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
 
+    #0, STREAM_PHASE_IDLE, STREAM_PHASE_SKIP_HEADER_LF, STREAM_PHASE_DATA, STREAM_PHASE_SKIP_TRAILER
+
 CON
 
     STRUCT DATE(WORD year, BYTE month, BYTE day, BYTE hour, BYTE min, BYTE sec, WORD weekday)
     STRUCT fileAttrs(BYTE rc, LONG sz, DATE creation)
+    STRUCT memory(BYTE drive, LONG total, LONG used)
 
 DAT
 
@@ -118,8 +121,8 @@ VAR
 
     LONG    streamChunkReceived
     LONG    streamChunkTotal
-    BYTE    streamNewline
-    BYTE    isStreaming
+    BYTE    streamPhase
+    BYTE    lastLineEndWasCr
     BYTE    streamFileArriving
     BYTE    streamTransferComplete
 
@@ -185,9 +188,10 @@ PUB start(rxPin, txPin, rtsPin, ctsPin, dtrPin, rstPin, baud, doReset, serialMod
     payloadMiso_init(PAYLOAD_MISO_BUF_SIZE)
     inWaitingPayloadLen := 0
     payloadSent := 0
-    isStreaming := 0
+    streamPhase := STREAM_PHASE_IDLE
     streamChunkReceived := 0
     streamChunkTotal := 0
+    lastLineEndWasCr := 0
     streamFileArriving := 0
     streamTransferComplete := 0
 
@@ -613,31 +617,41 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
         sendCommand(@"AT")
     repeat
         repeat
-            if isStreaming && (payloadMiso_used() > PAYLOAD_MISO_CTS_THERSH)
-                quit                                                          ' ring 2 buffer full -- stop pulling until drained
+            if streamPhase == STREAM_PHASE_DATA && (payloadMiso_used() > PAYLOAD_MISO_CTS_THERSH)
+                quit                                                            ' ring 2 buffer full -- stop pulling until drained
 
             inChar := ser.rxCheck()
 
-            if isStreaming && inChar <> -1
-                if inChar == 10 && !streamNewline
-                    streamNewline := 1
+            if streamPhase && inChar <> -1
+                if streamPhase == STREAM_PHASE_SKIP_HEADER_LF
+                    if inChar == 10
+                        streamPhase := STREAM_PHASE_DATA
+                        next
+                    streamPhase := STREAM_PHASE_DATA
+
+                if streamPhase == STREAM_PHASE_DATA
+                    payloadMiso_put(inChar)                                     ' room already guaranteed by check above
+                    streamChunkReceived++
+                    if streamChunkReceived == streamChunkTotal
+                        streamPhase := STREAM_PHASE_SKIP_TRAILER
                     next
 
-                payloadMiso_put(inChar)                                       ' room already guaranteed by check above
-                streamChunkReceived++
-
-                if streamChunkReceived == streamChunkTotal
-                    isStreaming := 0
-
-                ' debug("stream", lstr(@inChar,1), udec(streamChunkReceived), udec(streamChunkTotal), udec(payloadMiso_used())) ' causes slow-down
-                next
+                if streamPhase == STREAM_PHASE_SKIP_TRAILER
+                    if inChar == 10 or inChar == 13
+                        next
+                    streamPhase := STREAM_PHASE_IDLE
 
             case inChar
                 -1:                                                             ' no data
                     quit
-                10, 13:
+                13:
+                    lastLineEndWasCr := 1
                     fifoRx.ringBufferCommit()
                     quit                                                        ' quit to handle echo in case ">" is the next char
+                10:
+                    lastLineEndWasCr := 0
+                    fifoRx.ringBufferCommit()
+                    quit
                 ">":
                     if inWaitingForPrompt
                         inWaitingForPrompt := false
@@ -795,14 +809,16 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
                 addr := @buf + 16                                               ' Skip "+CFTRANTX: DATA,"
                 streamChunkTotal := str.atoi(addr)
                 streamChunkReceived := 0
-                isStreaming := 1
                 streamFileArriving := 1
-                streamNewline := 0
+                if lastLineEndWasCr
+                    streamPhase := STREAM_PHASE_SKIP_HEADER_LF
+                else
+                    streamPhase := STREAM_PHASE_DATA
                 debug("CFTRANTX chunk ", udec(streamChunkTotal), " bytes")
             elseif str.startswith(@buf, @"+CFTRANTX: ")
                 addr := @buf + 12                                               ' Skip "+CFTRANTX: "
                 if str.atoi(addr) == 0
-                    isStreaming := 0
+                    streamPhase := STREAM_PHASE_IDLE
                     streamFileArriving := 0
                     streamTransferComplete := 1
                     debug("CFTRANTX transfer complete")
@@ -1083,12 +1099,14 @@ PUB mqttSubscribe(clientNum, pTopic, qos) : r | topicLen, tmp[64]
     str.sprintf1(@tmp, @"AT+CMQTTSUB=%d\000", clientNum)
     r := runCommand(@tmp)
 
+
 PUB setMqttPublishTopic(clientNum, pTopic) : r | topicLen, tmp[128] ' 128 limits you to a 111-byte topic, module hard limit is 1024
     topicLen := strsize(pTopic)
     str.sprintf2(@tmp, @"AT+CMQTTTOPIC=%d,%d\000", clientNum, topicLen)
     r := runCommandWithPayload(@tmp, pTopic, topicLen)
     if r <> RESULT_OK
         return r
+
 
 PUB setMqttPublishPayload(clientNum, pPayload) : r | payloadLen, tmp[128] ' 128 limits you to a 108-byte payload. Module hard limit is 10240.
     payloadLen := strsize(pPayload)
@@ -1097,9 +1115,10 @@ PUB setMqttPublishPayload(clientNum, pPayload) : r | payloadLen, tmp[128] ' 128 
     if r <> RESULT_OK
         return r
 
+
 PUB mqttPublish(clientNum, qos, retain, timeout) : r | tmp[24] ' 128 limits you to a 111-byte topic and 108-byte payload. Module hard limits are 1024/10240 respectively.
-    repeat while payloadSent < inWaitingPayloadLen ' complete stream
-    repeat while inWaitingCompleted == false ' wait until the modem completes the stream
+    repeat while payloadSent < inWaitingPayloadLen      ' complete stream
+    repeat while inWaitingCompleted == false            ' wait until the modem completes the stream
     str.sprintf4(@tmp, @"AT+CMQTTPUB=%d,%d,%d,%d\000", clientNum, qos, timeout, retain)
     r := runCommand(@tmp)
 
@@ -1109,8 +1128,8 @@ PUB startMqttPayloadStream(clientNum, length) : r | tmp[128] ' 128 limits you to
 '' clientNum: MQTT client identifier
 '' length: Total payload length in bytes
 
+' Set the payload length
 
-    ' Set the payload length
     str.sprintf2(@tmp, @"AT+CMQTTPAYLOAD=%d,%d\000", clientNum, length)
     inWaitingForPrompt := true
     inWaitingPayloadLen := length
@@ -1119,18 +1138,22 @@ PUB startMqttPayloadStream(clientNum, length) : r | tmp[128] ' 128 limits you to
 
     r := RESULT_OK
 
+
 PUB streamRxByte() : b
     b := payloadMiso_get()
+
 
 PUB streamRxActive() : r
     r := streamFileArriving <> 0
 
+
 PUB streamRxComplete() : r
     r := streamTransferComplete <> 0
 
-PUB streamTxByte(byteValue) : r
 
-    ' Check if we've sent all bytes
+PUB streamTxByte(byteValue) : r
+' Check if we've sent all bytes
+
     if payloadSent >= inWaitingPayloadLen
         return 0
 
@@ -1222,12 +1245,12 @@ PUB fsRename(pOld, pNew) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
     r := runCommand(@tmp)
 
-PUB fsStartStreamingFile(pFullPath) : r | tmp[128]
+
+PUB fsStartReceivingFile(pFullPath) : r | tmp[128]
     payloadMiso_flush()
     streamChunkTotal := 0
     streamChunkReceived := 0
-    isStreaming := 0
-    streamNewline := 0
+    streamPhase := STREAM_PHASE_IDLE
     streamFileArriving := 0
     streamTransferComplete := 0
 
@@ -1238,6 +1261,20 @@ PUB fsStartStreamingFile(pFullPath) : r | tmp[128]
             return RESULT_OK
         if inWaitingCompleted
             return getCommandResult()
+
+
+PUB fsStartSendingFile(pFullPath, length) : r | tmp[128]
+
+    payloadMosi_flush()
+    inWaitingPayloadLen := length
+    payloadSent := 0
+    inWaitingForPrompt := true
+
+    str.sprintf4(@tmp, @"AT+CFTRANRX=%c%s%c,%d\000", 34, pFullPath, 34, length)
+    runBlindCommandForPrompt(@tmp)
+
+    r := RESULT_OK
+
 
 PUB fsGetAttrs(path, pAttrs) : r | tmp[128], resp[128], addr, sz
     str.sprintf1(@tmp, @"AT+FSATTRI=%s\000", path)
@@ -1374,3 +1411,18 @@ PUB fsLs(p_files, p_dirs, maxFilesBytes, maxDirsBytes) : r
 
     r := getCommandResult()
     return r
+
+
+PUB fsMem(pMemoryInfo) : r | tmp[64], addr
+    r := runCommandAndGetResponse(@"AT+FSMEM", @tmp, 64)
+    addr := @tmp + 8
+    memory[pMemoryInfo].drive := BYTE[addr]
+
+    addr += 3
+    memory[pMemoryInfo].total := str.atoi(addr)
+
+    repeat while BYTE[addr] <> ","
+        addr++
+    addr++
+
+    memory[pMemoryInfo].used := str.atoi(addr)

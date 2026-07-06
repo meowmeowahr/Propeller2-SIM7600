@@ -30,7 +30,7 @@ CON
 
     MODEM_BAUD             = 115_200                                ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
     MODEM_RESET            = 0                                      ' Reset modem on startup, 0 = no reset, 1 = reset
-    SERIAL_MODE            = %11000                                        
+    SERIAL_MODE            = %11000
 '' -- mode....       %0xx1 = invert rx
 ''                   %0x1x = invert tx
 ''                   %01xx = open-drain/open-source tx
@@ -50,6 +50,24 @@ OBJ
     str         : "string"
     ansi        : "jm_ansi"
 
+DAT
+
+    Banner      BYTE    "=======================================================",10,13
+                BYTE    " P2 SIM7600 Filesystem Demo                            ",10,13
+                BYTE    " Commands:                                             ",10,13
+                BYTE    " ls                  - list files and directories      ",10,13
+                BYTE    " mem                 - show available storage          ",10,13
+                BYTE    " sdc                 - get number of subdirectories    ",10,13
+                BYTE    " fc                  - get number of files             ",10,13
+                BYTE    " info <abspath>      - show file size and creation date",10,13
+                BYTE    " cd <path>           - change dir, supports `..`       ",10,13
+                BYTE    " mkdir <name>        - create dir, no recursion        ",10,13
+                BYTE    " rmdir <name>        - remove dir, no recursion        ",10,13
+                BYTE    " rename <from> <to>  - rename file or directory        ",10,13
+                BYTE    " rx <abspath>        - dump contents of a file         ",10,13
+                BYTE    " tx <abspath> <size> - create and send a file of <size>",10,13
+                BYTE    "=======================================================",10,13,0
+
 VAR
 
     ' large modem buffers
@@ -59,6 +77,10 @@ VAR
     BYTE    cwd[128]
     BYTE    input[128]
     BYTE    returnCode
+    BYTE    txUploadActive
+    BYTE    txUploadWaitingOk
+    LONG    txUploadExpected
+    LONG    txUploadSent
 
     BYTE    listFileBuffer[FILE_BUFFER_SIZE]
     BYTE    listDirectoryBuffer[DIRECTORY_BUFFER_SIZE]
@@ -72,6 +94,8 @@ PUB main() | pos, c, r, b
     term.rxflush()
     term.RX()
 
+    term.str(@Banner)
+
     term.str(@"Modem starting")
     ' Wait until modem is ready
     repeat
@@ -81,24 +105,36 @@ PUB main() | pos, c, r, b
             quit
         waitms(1000)
 
-    
-    ' r := modem.fsStartStreamingFile(@"c:/u.wav")
-    ' if r <> modem.RESULT_OK
-    '     debug("rx failed", udec(r))
-    ' else
-    '     repeat
-    '         b := modem.streamRxByte()
-    '         if b <> -1
-    '             debug(lstr(@b, 1))
-    '         elseif modem.streamRxComplete()
-    '             quit
-    '     debug("done")
-    ' term.TX(10)
-    ' term.TX(13)
+    txUploadActive := 0
+    txUploadWaitingOk := 0
+    txUploadExpected := 0
+    txUploadSent := 0
 
     txPrompt(@cwd, returnCode)
     repeat
+        if txUploadWaitingOk
+            ifnot modem.isCommandRunning()
+                txUploadWaitingOk := 0
+            else
+                c := term.rxcheck()
+                next
+
         c := term.rxcheck()
+        if txUploadActive
+            case c
+                -1:
+                    next
+                other:
+                    term.TX(c)
+                    sendTxByte(c)
+                    if txUploadSent >= txUploadExpected
+                        txUploadActive := 0
+                        txUploadWaitingOk := 1
+                        term.TX(10)
+                        term.TX(13)
+                        txPromptCached(@cwd, returnCode)
+            next
+
         case c
             -1, 0, term.LF:
                 next
@@ -108,7 +144,10 @@ PUB main() | pos, c, r, b
                 term.TX(13)
                 returnCode := processCommand(@input)
                 pos := 0
-                txPrompt(@cwd, returnCode)
+                if txUploadActive
+                    txDataPrompt()
+                else
+                    txPrompt(@cwd, returnCode)
             127:                                        ' DEL
                 if pos > 0
                     pos -= 1
@@ -123,6 +162,10 @@ PUB main() | pos, c, r, b
 
 PUB txPrompt(p_cwd, rc)
     modem.fsPwd(@cwd, 128)
+    txPromptCached(p_cwd, rc)
+
+
+PUB txPromptCached(p_cwd, rc)
     term.str(ansi.fgnd(ansi.MAGENTA))
     term.TX("[")
     term.dec(rc)
@@ -135,7 +178,13 @@ PUB txPrompt(p_cwd, rc)
     term.str(ansi.normal())
 
 
-PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, b
+PUB txDataPrompt()
+    term.str(ansi.fgnd(ansi.CYAN))
+    term.str(@">>> ")
+    term.str(ansi.normal())
+
+
+PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, modem.memory mem, b
     if str.startswith(p_input, @"cd ")
         r := modem.fsCd(p_input + 3)
     elseif str.startswith(p_input, @"mkdir ")
@@ -147,18 +196,23 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, b
     elseif str.startswith(p_input, @"rename ")
         r := doRename(p_input + 7)
     elseif str.startswith(p_input, @"rx ")
-        r := modem.fsStartStreamingFile(p_input + 3)
+        r := modem.fsStartReceivingFile(p_input + 3)
         if r <> modem.RESULT_OK
             return r
         repeat
             b := modem.streamRxByte()
             if b <> -1
-                term.tx(b)
-                ' waitms(10) ' simulate (terrible) delay
+                term.TX(b)
+            ' waitms(10) ' simulate (terrible) delay
             elseif modem.streamRxComplete()
                 quit
         term.TX(10)
         term.TX(13)
+        return 0
+    elseif str.startswith(p_input, @"tx ")
+        r := doTxUpload(p_input + 3)
+        if r <> modem.RESULT_OK
+            return r
         return 0
 
     elseif str.startswith(p_input, @"info ")
@@ -181,6 +235,9 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, b
         term.str(attrs.creation.weekday)
         term.TX(10)
         term.TX(13)
+    elseif strcomp(p_input, @"mem")
+        r := modem.fsMem(@mem)
+        term.fstr3(@"Drive: %c\r\nTotal: %d\r\nUsed: %d\r\n", mem.drive, mem.total, mem.used)
     elseif strcomp(p_input, @"fc")
         ct := modem.fsFileCount()
         if ct == -1
@@ -212,6 +269,50 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, b
         r := returnCode
     else
         r := 2
+
+
+PRI doTxUpload(pArgs) : r | addr, txLen
+'' pArgs points at "<path> <len>". Split once, start CFTRANRX, and enter data mode.
+
+    addr := pArgs
+    repeat while (BYTE[addr] <> " ") AND (BYTE[addr] <> 0)
+        addr++
+
+    if BYTE[addr] <> " "
+        return 2                                        ' malformed - no length argument
+
+    BYTE[addr] := 0                                     ' terminate path in place
+    addr++
+
+    repeat while BYTE[addr] == " "                      ' tolerate extra spaces before length
+        addr++
+
+    if BYTE[addr] == 0
+        return 2                                        ' malformed - length missing
+
+    txLen := str.atoi(addr)
+    if txLen <= 0
+        return 2
+
+    r := modem.fsStartSendingFile(pArgs, txLen)
+    if r <> modem.RESULT_OK
+        return r
+
+    txUploadActive := 1
+    txUploadWaitingOk := 0
+    txUploadExpected := txLen
+    txUploadSent := 0
+    return 0
+
+
+PRI sendTxByte(byteValue) : remaining
+'' Send one byte to the modem file upload stream, waiting until the modem accepts it.
+
+    repeat
+        remaining := modem.streamTxByte(byteValue)
+        if remaining >= 0
+            txUploadSent++
+            return
 
 
 PRI doRename(pArgs) : r | addr
