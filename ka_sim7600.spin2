@@ -17,8 +17,8 @@ CON
     MAX_LINE_LENGTH          = 1024
     MAX_RESPONSE             = 8192
     PAYLOAD_MOSI_BUF_SIZE    = 32
-    PAYLOAD_MISO_BUF_SIZE    = 64
-    PAYLOAD_MISO_CTS_THERSH  = 40
+    PAYLOAD_MISO_BUF_SIZE    = 512
+    PAYLOAD_MISO_CTS_THERSH  = 280
 
 CON
 
@@ -65,7 +65,7 @@ DAT
     Friday      BYTE    "Fri",0
 
 OBJ
-    ser         : "jm_fullduplexserial"
+    ser         : "ka_fcfds"
     nstr        : "jm_nstr"
     str         : "string"
 
@@ -74,8 +74,7 @@ OBJ
 
 VAR
     ' driver cfg
-    BYTE    rxP, txP, rtsP, dtrP, rstP
-    BYTE    invRts
+    BYTE    rxP, txP, rtsP, ctsP, dtrP, rstP
     LONG    baudRate
 
     ' driver
@@ -117,10 +116,12 @@ VAR
     LONG    payloadSent                                             ' How many bytes already sent
     BYTE    payloadWaitingForOk
 
-    LONG    streamReceived
-    LONG    streamTotal
+    LONG    streamChunkReceived
+    LONG    streamChunkTotal
     BYTE    streamNewline
     BYTE    isStreaming
+    BYTE    streamFileArriving
+    BYTE    streamTransferComplete
 
     BYTE    mqttClientNum
     WORD    mqttPayloadExpected
@@ -151,33 +152,18 @@ PUB null()
 ' this is not a top-level object
 
 
-PRI clearToRx()
-    if invRts
-        pinh(rtsP)
-    else
-        pinl(rtsP)
-
-
-PRI unclearToRx()
-    if invRts
-        pinl(rtsP)
-    else
-        pinh(rtsP)
-
-
-PUB start(rxPin, txPin, rtsPin, dtrPin, rstPin, baud, doReset, invertRts, pRxBuffer, rxBufferSize, pUrcBuffer, urcBufferSize)
+PUB start(rxPin, txPin, rtsPin, ctsPin, dtrPin, rstPin, baud, doReset, serialMode, pRxBuffer, rxBufferSize, pUrcBuffer, urcBufferSize)
     rtsP := rtsPin
+    ctsP := ctsPin
     dtrP := dtrPin
     rstP := rstPin
     rxP := rxPin
     txP := txPin
     baudRate := baud
-    invRts := invertRts
 
-    ser.start(rxP, txP, %0000, baudRate)
+    ser.startflow(rxP, txP, rtsP, ctsP, serialMode, baudRate)
 
     pinl(dtrP)
-    clearToRx()
 
     doInitialReset := doReset
     modemIsReady, smsIsReady, phonebookIsReady, simIsReady := false, false, false, false
@@ -196,12 +182,14 @@ PUB start(rxPin, txPin, rtsPin, dtrPin, rstPin, baud, doReset, invertRts, pRxBuf
     bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
 
     payloadMosi_init(PAYLOAD_MOSI_BUF_SIZE)
-    payloadMiso_init(PAYLOAD_MOSI_BUF_SIZE)
+    payloadMiso_init(PAYLOAD_MISO_BUF_SIZE)
     inWaitingPayloadLen := 0
     payloadSent := 0
     isStreaming := 0
-    streamReceived := 0
-    streamTotal := 0
+    streamChunkReceived := 0
+    streamChunkTotal := 0
+    streamFileArriving := 0
+    streamTransferComplete := 0
 
     mqttTopicLen := 0
     mqttTopicExpected := 0
@@ -592,6 +580,7 @@ PRI sendCommand(p_cmdStr) | cmdLen
 
 
 PRI onConnect()
+    sendCommand(@"AT+IFC=2,2")
 
 
 PRI markModemReady()
@@ -602,8 +591,9 @@ PRI markModemReady()
 PRI appendResponse(b) | len, responseLen
 
     len := strsize(b)
+    responseLen := strsize(@responseBuffer)
 
-    if len + 2 >= MAX_RESPONSE
+    if responseLen + len + 2 >= MAX_RESPONSE
         debug("ERR: response overflow")
         return
 
@@ -616,33 +606,30 @@ PRI appendResponse(b) | len, responseLen
 
 
 PRI modemCog() | inChar, addr, len, clientNumFromUrc
+
     if doInitialReset
         hardReset()
     else
         sendCommand(@"AT")
     repeat
-        ' do we need to unclear cts
-        ifnot isStreaming
-            clearToRx()
-        elseif payloadMiso_size() > PAYLOAD_MISO_CTS_THERSH
-            unclearToRx()
-        else
-            clearToRx()
-
         repeat
+            if isStreaming && (payloadMiso_used() > PAYLOAD_MISO_CTS_THERSH)
+                quit                                                          ' ring 2 buffer full -- stop pulling until drained
+
             inChar := ser.rxCheck()
 
             if isStreaming && inChar <> -1
                 if inChar == 10 && !streamNewline
                     streamNewline := 1
                     next
-                payloadMiso_put(inChar)
-                streamReceived++
 
-                if streamReceived == streamTotal
+                payloadMiso_put(inChar)                                       ' room already guaranteed by check above
+                streamChunkReceived++
+
+                if streamChunkReceived == streamChunkTotal
                     isStreaming := 0
 
-                debug("stream", lstr(@inChar,1), udec(streamReceived), udec(streamTotal))
+                ' debug("stream", lstr(@inChar,1), udec(streamChunkReceived), udec(streamChunkTotal), udec(payloadMiso_used())) ' causes slow-down
                 next
 
             case inChar
@@ -805,10 +792,20 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
 
             ' files
             elseif str.startswith(@buf, @"+CFTRANTX: DATA,")
-                addr := @buf + 16                                               ' Skip "+CMQTTRXTOPIC: "
+                addr := @buf + 16                                               ' Skip "+CFTRANTX: DATA,"
+                streamChunkTotal := str.atoi(addr)
+                streamChunkReceived := 0
                 isStreaming := 1
-                streamTotal := str.atoi(addr)
-                debug("streaming in ", udec(streamTotal))
+                streamFileArriving := 1
+                streamNewline := 0
+                debug("CFTRANTX chunk ", udec(streamChunkTotal), " bytes")
+            elseif str.startswith(@buf, @"+CFTRANTX: ")
+                addr := @buf + 12                                               ' Skip "+CFTRANTX: "
+                if str.atoi(addr) == 0
+                    isStreaming := 0
+                    streamFileArriving := 0
+                    streamTransferComplete := 1
+                    debug("CFTRANTX transfer complete")
 
             ' response
             elseif strcomp(@buf, @inWaitingCommand)
@@ -984,12 +981,11 @@ PRI payloadMiso_get() : b
     return b
 
 
-PRI payloadMiso_available() : c
-    c := (payloadMiso_head - payloadMiso_tail) & payloadMiso_ring_mask
-
-
-PRI payloadMiso_size() : c
-    c := payloadMiso_ring_mask + 1
+PRI payloadMiso_used() : c
+    if payloadMiso_head >= payloadMiso_tail
+        c := payloadMiso_head - payloadMiso_tail
+    else
+        c := payloadMiso_head - payloadMiso_tail + (payloadMiso_ring_mask + 1)
 
 
 PRI payloadMiso_flush()
@@ -1123,6 +1119,14 @@ PUB startMqttPayloadStream(clientNum, length) : r | tmp[128] ' 128 limits you to
 
     r := RESULT_OK
 
+PUB streamRxByte() : b
+    b := payloadMiso_get()
+
+PUB streamRxActive() : r
+    r := streamFileArriving <> 0
+
+PUB streamRxComplete() : r
+    r := streamTransferComplete <> 0
 
 PUB streamTxByte(byteValue) : r
 
@@ -1219,10 +1223,21 @@ PUB fsRename(pOld, pNew) : r | tmp[128]
     r := runCommand(@tmp)
 
 PUB fsStartStreamingFile(pFullPath) : r | tmp[128]
+    payloadMiso_flush()
+    streamChunkTotal := 0
+    streamChunkReceived := 0
+    isStreaming := 0
+    streamNewline := 0
+    streamFileArriving := 0
+    streamTransferComplete := 0
+
     str.sprintf3(@tmp, @"AT+CFTRANTX=%c%s%c\000", 34, pFullPath, 34)
     sendCommand(@tmp)
-    repeat while isStreaming == 0
-    r := 0
+    repeat
+        if streamFileArriving || streamTransferComplete
+            return RESULT_OK
+        if inWaitingCompleted
+            return getCommandResult()
 
 PUB fsGetAttrs(path, pAttrs) : r | tmp[128], resp[128], addr, sz
     str.sprintf1(@tmp, @"AT+FSATTRI=%s\000", path)
@@ -1232,7 +1247,18 @@ PUB fsGetAttrs(path, pAttrs) : r | tmp[128], resp[128], addr, sz
         return r
 
     addr := @resp
-    sz := str.atoi(addr + 9)
+    repeat while (BYTE[addr] <> 0)
+        if str.startswith(addr, @"+FSATTRI: ")
+            quit
+        repeat while (BYTE[addr] <> 0) AND (BYTE[addr] <> 10)
+            addr++
+        if BYTE[addr] == 10
+            addr++
+
+    ifnot str.startswith(addr, @"+FSATTRI: ")
+        return RESULT_READ_FILE_ERROR
+
+    sz := str.atoi(addr + 10)
 
     fileAttrs[pAttrs].rc := r
     fileAttrs[pAttrs].sz := sz

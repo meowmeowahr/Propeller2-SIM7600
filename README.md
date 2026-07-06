@@ -36,6 +36,8 @@ All examples use the following pinout:
 | RX    | 0  |
 | DTR   | 2  |
 | RST   | 3  |
+| CTS   | 4  |
+| RTS   | 5  |
 
 > [!NOTE]
 > Level shifting is not required, as the module operates at 3.3v logic levels. Ensure that `Vio` is not connected, if using the Waveshare board
@@ -117,7 +119,8 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] Baud Rate Configuration
 * [ ] Device mode setting (normal, flight, limited, etc)
 * [x] MQTT
-* [ ] Hardware Flow Control
+* [ ] MQTTS
+* [x] Hardware Flow Control
 * [ ] SSL
 * [ ] SIM Locking
 * [ ] SIM Toolkit
