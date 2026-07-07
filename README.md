@@ -133,6 +133,25 @@ See [MQTT Development](#mqtt-development) for more information
 
 On-device filesystem manipulation shell. Hit return after download to view help information.
 
+### [09_ssl_manager.spin2](09_ssl_manager.spin2)
+
+On-device SSL certificate manager. Allows for listing, deleting, and sending new certificates.
+
+#### Sending Certificates with `minicom`
+
+* Run the `tx` command to start a new transmission.
+
+> [!TIP]
+> The P2 is waiting for bytes once you see the `>>>` prompt
+
+![SSL Manager Menu in minicom](docs/minicom_ssl_menu.png)
+
+* Use the `CTRL-A K` keyboard macro to select a file to transfer
+
+![Selecting a .pem file in minicom for transmission](docs/minicom_ssl_select.png)
+
+Navigate to your desired file, using the `[Goto]` option to change directories. Once ready, press Space to select, and return to begin transmission.
+
 ### [99_mqtt_dht.spin2](99_mqtt_dht.spin2)
 
 IoT data collection example using a DHT22 temperature/humidity sensor.
