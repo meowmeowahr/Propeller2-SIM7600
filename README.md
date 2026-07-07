@@ -152,6 +152,10 @@ On-device SSL certificate manager. Allows for listing, deleting, and sending new
 
 Navigate to your desired file using the `[Goto]` option to change directories. Once ready, press Space to select, and return to begin transmission.
 
+### [10_mqtt_publish_ssl.spin2](10_mqtt_publish_ssl.spin2)
+
+Publishes small payloads to an MQTT topic using SSL Server verification. Use [example 09](#09_ssl_managerspin2) to upload a certificate to the modem first.
+
 ### [99_mqtt_dht.spin2](99_mqtt_dht.spin2)
 
 IoT data collection example using a DHT22 temperature/humidity sensor.

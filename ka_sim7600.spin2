@@ -1045,13 +1045,16 @@ PUB mqttAcquireClient(clientNum, pClientName) : r | tmp[128]
     str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c\000", clientNum, 34, pClientName, 34)
     r := runCommand(@tmp)
 
+
 PUB mqttAcquireClientSsl(clientNum, pClientName) : r | tmp[128]
     str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c,1\000", clientNum, 34, pClientName, 34)
     r := runCommand(@tmp)
 
+
 PUB mqttSetSslContext(clientNum, contextNum) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+CMQTTSSLCFG=%d,%d\000", clientNum, contextNum)
     r := runCommand(@tmp)
+
 
 PUB mqttWillTopic(clientNum, pWillTopic) : r | topicLen, tmp[64]
     topicLen := strsize(pWillTopic)
@@ -1488,6 +1491,7 @@ PUB sslSetAuthMode(context, authmode) : r | tmp[64]
 PUB sslSetVersion(context, sslversion) : r | tmp[64]
     str.sprintf4(@tmp, @"AT+CSSLCFG=%csslversion%c,%d,%d\000", 34, 34, context, sslversion)
     r := runCommand(@tmp)
+
 
 PUB sslSetCert(context, p_certfile) : r | tmp[64]
     str.sprintf6(@tmp, @"AT+CSSLCFG=%ccacert%c,%d,%c%s%c\000", 34, 34, context, 34, p_certfile, 34)
