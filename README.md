@@ -146,7 +146,7 @@ On-device SSL certificate manager. Allows for listing, deleting, and sending new
 
 ![SSL Manager Menu in minicom](docs/minicom_ssl_menu.png)
 
-* Use the `CTRL-A K` keyboard macro to select a file to transfer
+* Use the `CTRL-A Y` keyboard macro to select a file to transfer
 
 ![Selecting a .pem file in minicom for transmission](docs/minicom_ssl_select.png)
 
