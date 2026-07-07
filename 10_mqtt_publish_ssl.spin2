@@ -1,0 +1,209 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 10_mqtt_publish_ssl.spin2
+''   Purpose.... MQTT Publisher Client Example for SIM7600 Modem using Server SSL
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 07 JUN 2026
+''   Updated.... 07 JUL 2026
+''
+'' =================================================================================================
+
+CON
+
+    _CLKFREQ  = 200_000_000
+
+CON { app io pins }
+
+    RX   = 1
+    TX   = 0
+    DTR  = 2
+    RST  = 3
+    RTS  = 4                                                        ' connect to modem CTS pin
+    CTS  = 5                                                        ' connect to modem RTS pin
+
+DAT { network settings }
+
+    APN             BYTE    "hologram",0                            ' Cellular APN
+    BROKER_ADDRESS  BYTE    "tcp://emqx.kevinbot.net:8883",0        ' Your MQTT broker address, this example does not support SSL/TLS
+    SSLCERT_NAME    BYTE    "server_ca.pem",0                       ' SSL certificate name. Use `09_ssl_manager.spin2` to upload certs
+
+    CLIENT_ID       BYTE    "p2_sim7600_client",0                   ' MQTT client id, visible to the broker
+    PUBLISH_TOPIC   BYTE    "propeller2/pubdemo",0                  ' Topic to publish to
+
+    WILL_TOPIC      BYTE    "p2_sim7600_client/will",0              ' Topic for the will message
+    WILL_MSG        BYTE    "offline",0                             ' Will message to be sent if the client disconnects unexpectedly
+
+CON
+
+    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_RESET      = 0                                            ' Reset modem on startup, 0 = no reset, 1 = reset
+    SERIAL_MODE      = %11000                                        
+'' -- mode.... %0xx1 = invert rx
+''             %0x1x = invert tx
+''             %01xx = open-drain/open-source tx
+''             %1xxx = invert rts (idle/deasserted = low, asserted = high)
+''            %1xxxx = invert cts (peer asserts with high instead of low)
+
+    RX_BUFFER_SIZE   = 4096
+    URC_BUFFER_SIZE  = 4096
+
+OBJ
+
+    modem       : "ka_sim7600"
+    secrets     : "00_secrets"
+    nstr        : "jm_nstr"
+
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
+PUB main() | status, i
+    modem.start(RX, TX, RTS, CTS, DTR, RST, MODEM_BAUD, MODEM_RESET, SERIAL_MODE, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+
+    ' leds off
+    pinl(56)
+    pinl(57)
+
+    ' Wait until modem is ready
+    repeat
+        waitms(1000)
+        debug("Modem starting...")
+        if modem.isReady()
+            debug("Modem ready!")
+            quit
+
+    ' Configure APN
+    status := modem.definePdpContext(1, @APN)
+    debug("definePdpContext: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set APN")
+        repeat
+            waitct(1)
+
+    ' Configure SSL
+    status := modem.sslSetAuthMode(0, modem.AUTHMODE_SERVER)
+    debug("setSslAuthMode: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set ssl mode")
+        repeat
+            waitct(1)
+
+    status := modem.sslSetVersion(0, modem.SSLTLS_ALL)
+    debug("sslSetVersion: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set ssl version")
+        repeat
+            waitct(1)
+
+    status := modem.sslSetCert(0, @SSLCERT_NAME)
+    debug("sslSetCert: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set ssl certfile")
+        repeat
+            waitct(1)
+
+
+    ' Start MQTT Service
+    status := modem.mqttStart()
+    debug("mqttStart: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to start MQTT service")
+        repeat
+            waitct(1)
+
+    ' acquire client 0
+    status := modem.mqttAcquireClientSsl(0, @CLIENT_ID)
+    debug("mqttAcquireClient: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to acquire client")
+        repeat
+            waitct(1)
+
+    ' enable ssl from context 0
+    status := modem.mqttSetSslContext(0, 0)
+    debug("mqttSetSslContext: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set client ssl context")
+        repeat
+            waitct(1)
+
+    ' will topic
+    status := modem.mqttWillTopic(0, @WILL_TOPIC)
+    debug("mqttWillTopic: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will topic")
+        repeat
+            waitct(1)
+
+    ' will msg
+    status := modem.mqttWillMsg(0, @WILL_MSG, 1)
+    debug("mqttWillMsg: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to set will msg")
+        repeat
+            waitct(1)
+
+    ' connect
+    ' REPLACE THE MQTT ADDRESS WITH YOUR OWN SERVER
+    status := modem.mqttConnect(0, @BROKER_ADDRESS, 60, 1, secrets.mqttUsername(), secrets.mqttPassword())
+    debug("mqttConnect: ", sdec(status))
+    if status <> modem.RESULT_OK
+        debug("Failed to connect to broker")
+        repeat
+            waitct(1)
+
+    i := 0
+    repeat
+        ' publish
+        status := modem.setMqttPublishTopic(0, @PUBLISH_TOPIC)
+        if status <> modem.RESULT_OK
+            debug("Failed to set topic")
+            repeat
+                waitct(1)
+
+        status := modem.setMqttPublishPayload(0, nstr.dec(i, 0))
+        if status <> modem.RESULT_OK
+            debug("Failed to set payload")
+            repeat
+                waitct(1)
+
+        status := modem.mqttPublish(0, 0, 0, 60)
+        debug("mqttPublish: ", sdec(status))
+        if status <> modem.RESULT_OK
+            debug("Failed to publish")
+            repeat
+                waitct(1)
+        i++
+        waitms(2000)
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

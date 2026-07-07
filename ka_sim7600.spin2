@@ -47,12 +47,12 @@ CON
     RESULT_FILE_CREATE_ERROR,                           ...
     RESULT_READ_FILE_ERROR,                             ...
     RESULT_WRITE_FILE_ERROR
-    
+
     ' ssl
     #0, SSL_3_0, TLS_1_0, TLS_1_1, TLS_1_2, SSLTLS_ALL
 
     ' auth
-    #0, AUTHMODE_NONE, AUTHMODE_SERVER, AUTHMODE_SERVER_CLIENT_mTLS, AUTHMODE_CLIENT
+    #0, AUTHMODE_NONE, AUTHMODE_SERVER, AUTHMODE_SERVER_CLIENT_MTLS, AUTHMODE_CLIENT
 
     ' cert expiry
     #0, CHECK_CERT_EXPIRY, IGNORE_CERT_EXPIRY
@@ -164,10 +164,10 @@ VAR
     BYTE    fsLsOverflow                                            ' overflow flag
 
     ' SSL List Certs streaming globals
-    BYTE sslListing
-    LONG sslListPtr
-    LONG sslListCertsMax
-    BYTE sslListOverflow
+    BYTE    sslListing
+    LONG    sslListPtr
+    LONG    sslListCertsMax
+    BYTE    sslListOverflow
 
 PUB null()
 ' this is not a top-level object
@@ -1045,6 +1045,13 @@ PUB mqttAcquireClient(clientNum, pClientName) : r | tmp[128]
     str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c\000", clientNum, 34, pClientName, 34)
     r := runCommand(@tmp)
 
+PUB mqttAcquireClientSsl(clientNum, pClientName) : r | tmp[128]
+    str.sprintf4(@tmp, @"AT+CMQTTACCQ=%d,%c%s%c,1\000", clientNum, 34, pClientName, 34)
+    r := runCommand(@tmp)
+
+PUB mqttSetSslContext(clientNum, contextNum) : r | tmp[128]
+    str.sprintf2(@tmp, @"AT+CMQTTSSLCFG=%d,%d\000", clientNum, contextNum)
+    r := runCommand(@tmp)
 
 PUB mqttWillTopic(clientNum, pWillTopic) : r | topicLen, tmp[64]
     topicLen := strsize(pWillTopic)
@@ -1250,9 +1257,11 @@ PUB fsRename(pOld, pNew) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
     r := runCommand(@tmp)
 
+
 PUB fsCopySync(pSrc, pDst) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSCOPY=%s,%s\000", pSrc, pDst)
     r := runCommand(@tmp)
+
 
 PUB fsStartReceivingFile(pFullPath) : r | tmp[128]
     payloadMiso_flush()
@@ -1435,6 +1444,7 @@ PUB fsMem(pMemoryInfo) : r | tmp[64], addr
 
     memory[pMemoryInfo].used := str.atoi(addr)
 
+
 PUB sslStartSendingCert(pFilename, length) : r | tmp[128]
 
     payloadMosi_flush()
@@ -1447,9 +1457,11 @@ PUB sslStartSendingCert(pFilename, length) : r | tmp[128]
 
     r := RESULT_OK
 
+
 PUB sslDeleteCert(filename) : r | tmp[128]
     str.sprintf3(@tmp, @"AT+CCERTDELE=%c%s%c\000", 34, filename, 34)
     r := runCommand(@tmp)
+
 
 PUB sslListCerts(p_certs, maxCertsBytes) : r
     sslListing := 1
@@ -1466,3 +1478,17 @@ PUB sslListCerts(p_certs, maxCertsBytes) : r
 
     r := getCommandResult()
     return r
+
+
+PUB sslSetAuthMode(context, authmode) : r | tmp[64]
+    str.sprintf4(@tmp, @"AT+CSSLCFG=%cauthmode%c,%d,%d\000", 34, 34, context, authmode)
+    r := runCommand(@tmp)
+
+
+PUB sslSetVersion(context, sslversion) : r | tmp[64]
+    str.sprintf4(@tmp, @"AT+CSSLCFG=%csslversion%c,%d,%d\000", 34, 34, context, sslversion)
+    r := runCommand(@tmp)
+
+PUB sslSetCert(context, p_certfile) : r | tmp[64]
+    str.sprintf6(@tmp, @"AT+CSSLCFG=%ccacert%c,%d,%c%s%c\000", 34, 34, context, 34, p_certfile, 34)
+    r := runCommand(@tmp)

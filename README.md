@@ -150,7 +150,7 @@ On-device SSL certificate manager. Allows for listing, deleting, and sending new
 
 ![Selecting a .pem file in minicom for transmission](docs/minicom_ssl_select.png)
 
-Navigate to your desired file, using the `[Goto]` option to change directories. Once ready, press Space to select, and return to begin transmission.
+Navigate to your desired file using the `[Goto]` option to change directories. Once ready, press Space to select, and return to begin transmission.
 
 ### [99_mqtt_dht.spin2](99_mqtt_dht.spin2)
 
