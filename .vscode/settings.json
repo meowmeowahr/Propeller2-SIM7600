@@ -112,9 +112,11 @@
   "spinExtension.toolchain.optionsDownload.enterTerminalAfter": "only when debug() compile enabled",
   "spinExtension.toolchain.optionsDownload.user.baudrate": 2000000,
   "cSpell.words": [
+    "abspath",
     "atoi",
     "BKSP",
     "bytemove",
+    "CFTRANRX",
     "CFTRANTX",
     "CGDCONT",
     "CGMI",

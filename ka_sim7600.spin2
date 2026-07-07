@@ -1245,6 +1245,9 @@ PUB fsRename(pOld, pNew) : r | tmp[128]
     str.sprintf2(@tmp, @"AT+FSRENAME=%s,%s\000", pOld, pNew)
     r := runCommand(@tmp)
 
+PUB fsCopySync(pSrc, pDst) : r | tmp[128]
+    str.sprintf2(@tmp, @"AT+FSCOPY=%s,%s\000", pSrc, pDst)
+    r := runCommand(@tmp)
 
 PUB fsStartReceivingFile(pFullPath) : r | tmp[128]
     payloadMiso_flush()

@@ -121,6 +121,10 @@ Publishes large payloads (10240 bytes) to an MQTT topic.
 
 See [MQTT Development](#mqtt-development) for more information
 
+### [08_filesystem.spin2](08_filesystem.spin2)
+
+On-device filesystem manipulation shell. Hit return after download to view help information.
+
 ### [99_mqtt_dht.spin2](99_mqtt_dht.spin2)
 
 IoT data collection example using a DHT22 temperature/humidity sensor.
@@ -151,7 +155,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [ ] SSL
 * [ ] SIM Locking
 * [ ] SIM Toolkit
-* [ ] Modem Filesystem
+* [*] Modem Filesystem
 * [ ] Modem GPIO
 * [ ] SMS
 * [ ] Voice Calls

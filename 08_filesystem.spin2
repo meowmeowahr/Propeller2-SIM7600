@@ -64,6 +64,8 @@ DAT
                 BYTE    " mkdir <name>        - create dir, no recursion        ",10,13
                 BYTE    " rmdir <name>        - remove dir, no recursion        ",10,13
                 BYTE    " rename <from> <to>  - rename file or directory        ",10,13
+                BYTE    " cp <from> <to>      - copy file                       ",10,13
+                BYTE    " rm <name>           - delete file                     ",10,13
                 BYTE    " rx <abspath>        - dump contents of a file         ",10,13
                 BYTE    " tx <abspath> <size> - create and send a file of <size>",10,13
                 BYTE    "=======================================================",10,13,0
@@ -195,6 +197,8 @@ PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, modem.memory mem, b
         r := modem.fsDel(p_input + 3)
     elseif str.startswith(p_input, @"rename ")
         r := doRename(p_input + 7)
+    elseif str.startswith(p_input, @"cp ")
+        r := doCopy(p_input + 3)
     elseif str.startswith(p_input, @"rx ")
         r := modem.fsStartReceivingFile(p_input + 3)
         if r <> modem.RESULT_OK
@@ -336,6 +340,26 @@ PRI doRename(pArgs) : r | addr
 
     r := modem.fsRename(pArgs, addr)
 
+PRI doCopy(pArgs) : r | addr
+'' pArgs points at "<from> <to>". Split on the first space, then call fsCopySync(from, to).
+
+    addr := pArgs
+    repeat while (BYTE[addr] <> " ") AND (BYTE[addr] <> 0)
+        addr++
+
+    if BYTE[addr] <> " "
+        return 2                                        ' malformed - no second argument
+
+    BYTE[addr] := 0                                     ' terminate "from" in place
+    addr++                                              ' skip the space
+
+    repeat while (BYTE[addr] == " ")                    ' tolerate extra spaces before "to"
+        addr++
+
+    if BYTE[addr] == 0
+        return 2                                        ' malformed - "to" missing/empty
+
+    r := modem.fsCopySync(pArgs, addr)
 
 PRI printEntryList(type, pBuf) | addr
 '' Walk a 255-separated, 0-terminated list of entries, printing one per line
