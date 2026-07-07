@@ -181,7 +181,7 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] Baud Rate Configuration
 * [ ] Device mode setting (normal, flight, limited, etc)
 * [x] MQTT
-* [ ] MQTTS
+* [x] MQTTS
 * [x] Hardware Flow Control
 * [x] Certificate Manager
 * [ ] SSL
@@ -208,7 +208,7 @@ The project is configured for development in VSCode using the [Spin2 LanguageSer
 
 The MQTT features of this driver require an MQTT broker to be **configured and forwarded to a public IP/domain**. The SIM7600 modem does not support MQTTv5, and requires a broker that supports MQTTv3.1/MQIsdp3.
 
-The driver currently does not support SSL, so be mindful of the data you send. Username and password authentication is supported.
+Username and password authentication is supported.
 
 #### Broker
 
