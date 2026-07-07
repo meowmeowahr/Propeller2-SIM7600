@@ -1,0 +1,269 @@
+{Spin2_v53}
+
+'' =================================================================================================
+''
+''   File....... 09_ssl_manager.spin2
+''   Purpose.... Manage SSL Certificate files stored on the modem
+''               -- Note that the modem does not allow for retrieval of certs
+''   Authors.... Kevin Ahr
+''               -- see below for terms of use
+''   E-mail..... meowmeowahr@gmail.com
+''   Started.... 03 JUL 2026
+''   Updated.... 05 JUL 2026
+''
+'' =================================================================================================
+
+CON
+    _CLKFREQ  = 200_000_000
+
+    BR_TERM   = 921_600                                             ' terminal baud rate
+
+CON { app io pins }
+
+    RX   = 1
+    TX   = 0
+    DTR  = 2
+    RST  = 3
+    RTS  = 4                                                        ' connect to modem CTS pin
+    CTS  = 5                                                        ' connect to modem RTS pin
+
+CON
+
+    MODEM_BAUD        = 115_200                                     ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_RESET       = 0                                           ' Reset modem on startup, 0 = no reset, 1 = reset
+    SERIAL_MODE       = %11000
+'' -- mode....       %0xx1 = invert rx
+''                   %0x1x = invert tx
+''                   %01xx = open-drain/open-source tx
+''                   %1xxx = invert rts (idle/deasserted = low, asserted = high)
+''                  %1xxxx = invert cts (peer asserts with high instead of low)
+
+    RX_BUFFER_SIZE    = 4096
+    URC_BUFFER_SIZE   = 1024
+
+    LIST_BUFFER_SIZE  = 512
+
+OBJ
+
+    modem       : "ka_sim7600"
+    term        : "jm_fullduplexserial"
+    str         : "string"
+    ansi        : "jm_ansi"
+
+DAT
+
+    Banner      BYTE    "=======================================================",10,13
+                BYTE    " P2 SIM7600 SSL Manager                                ",10,13
+                BYTE    " Commands:                                             ",10,13
+                BYTE    " ls                  - list certificates               ",10,13
+                BYTE    " del <name>          - delete cert                     ",10,13
+                BYTE    " tx <abspath> <size> - create and send a cert of <size>",10,13
+                BYTE    "=======================================================",10,13,0
+
+VAR
+
+    ' large modem buffers
+    BYTE    rxBuffer[RX_BUFFER_SIZE]
+    BYTE    urcBuffer[URC_BUFFER_SIZE]
+
+    BYTE    input[128]
+    BYTE    returnCode
+    BYTE    txUploadActive
+    BYTE    txUploadWaitingOk
+    LONG    txUploadExpected
+    LONG    txUploadSent
+
+    BYTE    listBuffer[LIST_BUFFER_SIZE]
+
+PUB main() | pos, c
+
+    modem.start(RX, TX, RTS, CTS, DTR, RST, MODEM_BAUD, MODEM_RESET, SERIAL_MODE, @rxBuffer, RX_BUFFER_SIZE, @urcBuffer, URC_BUFFER_SIZE)
+    term.tstart(BR_TERM)
+
+    ' wait for terminal input
+    term.rxflush()
+    term.RX()
+
+    term.str(@Banner)
+
+    term.str(@"Modem starting")
+    ' Wait until modem is ready
+    repeat
+        term.TX(".")
+        if modem.isReady()
+            term.str(string(10, 13, "Modem ready", 10, 13))
+            quit
+        waitms(1000)
+
+    txPrompt(returnCode)
+    repeat
+        if txUploadWaitingOk
+            ifnot modem.isCommandRunning()
+                txUploadWaitingOk := 0
+            else
+                c := term.rxcheck()
+                next
+
+        c := term.rxcheck()
+        if txUploadActive
+            case c
+                -1:
+                    next
+                other:
+                    term.TX(c)
+                    sendTxByte(c)
+                    if txUploadSent >= txUploadExpected
+                        txUploadActive := 0
+                        txUploadWaitingOk := 1
+                        term.TX(10)
+                        term.TX(13)
+                        txPrompt(returnCode)
+            next
+
+        case c
+            -1, 0, term.LF:
+                next
+            term.CR:
+                input[pos] := 0
+                term.TX(10)
+                term.TX(13)
+                returnCode := processCommand(@input)
+                pos := 0
+                if txUploadActive
+                    txDataPrompt()
+                else
+                    txPrompt(returnCode)
+            127:                                        ' DEL
+                if pos > 0
+                    pos -= 1
+                    term.TX(term.BKSP)
+                    term.TX(32)
+                    term.TX(term.BKSP)
+            other:
+                input[pos] := c
+                pos += 1
+                term.TX(c)
+
+
+PUB txPrompt(rc)
+    term.str(ansi.fgnd(ansi.MAGENTA))
+    term.TX("[")
+    term.dec(rc)
+    term.TX("]")
+    term.str(ansi.normal())
+    term.str(ansi.fgnd(ansi.GREEN))
+    term.str(@" > ")
+    term.str(ansi.normal())
+
+
+PUB txDataPrompt()
+    term.str(ansi.fgnd(ansi.CYAN))
+    term.str(@">>> ")
+    term.str(ansi.normal())
+
+
+PUB processCommand(p_input) : r | ct, modem.fileAttrs attrs, modem.memory mem, b
+    if strcomp(p_input, @"ls")
+        bytefill(@listBuffer, 0, LIST_BUFFER_SIZE)
+        r := modem.sslListCerts(@listBuffer, LIST_BUFFER_SIZE)
+        if r <> modem.RESULT_OK
+            return r
+        printEntryList("c", @listBuffer)
+        return 0
+    elseif str.startswith(p_input, @"del ")
+        r := modem.sslDeleteCert(p_input + 4)
+    elseif str.startswith(p_input, @"tx ")
+        r := doTxUpload(p_input + 3)
+        if r <> modem.RESULT_OK
+            return r
+        return 0
+    elseif str.isempty(p_input)
+        r := returnCode
+    else
+        r := 2
+
+
+PRI doTxUpload(pArgs) : r | addr, txLen
+'' pArgs points at "<path> <len>". Split once, start CFTRANRX, and enter data mode.
+
+    addr := pArgs
+    repeat while (BYTE[addr] <> " ") AND (BYTE[addr] <> 0)
+        addr++
+
+    if BYTE[addr] <> " "
+        return 2                                        ' malformed - no length argument
+
+    BYTE[addr] := 0                                     ' terminate path in place
+    addr++
+
+    repeat while BYTE[addr] == " "                      ' tolerate extra spaces before length
+        addr++
+
+    if BYTE[addr] == 0
+        return 2                                        ' malformed - length missing
+
+    txLen := str.atoi(addr)
+    if txLen <= 0
+        return 2
+
+    r := modem.sslStartSendingCert(pArgs, txLen)
+    if r <> modem.RESULT_OK
+        return r
+
+    txUploadActive := 1
+    txUploadWaitingOk := 0
+    txUploadExpected := txLen
+    txUploadSent := 0
+    return 0
+
+
+PRI sendTxByte(byteValue) : remaining
+'' Send one byte to the modem file upload stream, waiting until the modem accepts it.
+
+    repeat
+        remaining := modem.streamTxByte(byteValue)
+        if remaining >= 0
+            txUploadSent++
+            return
+
+
+PRI printEntryList(type, pBuf) | addr
+'' Walk a 255-separated, 0-terminated list of entries, printing one per line
+
+    addr := pBuf
+    repeat while (BYTE[addr] <> 0)
+        term.TX(type)
+        term.TX(" ")
+        repeat while (BYTE[addr] <> 255) AND (BYTE[addr] <> 0)
+            term.TX(BYTE[addr])
+            addr++
+        term.TX(10)
+        term.TX(13)
+        if BYTE[addr] == 255
+            addr++
+
+CON { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+}}

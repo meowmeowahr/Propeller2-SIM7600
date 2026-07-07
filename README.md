@@ -83,6 +83,14 @@ Copy/rename the [00_secrets.template.spin2](00_secrets.template.spin2) file to `
 > [!WARNING]
 > Many of these examples do not use SSL/TLS. Do not reuse passwords. Use MQTTS with SSL/TLS in production.
 
+### Serial Terminal
+
+Some of these examples require an ANSI terminal, such as the inbuilt terminal of [`loadp2`](https://github.com/totalspectrum/loadp2), or an external terminal such as [`tio`](https://github.com/tio/tio) or [`minicom`](https://salsa.debian.org/minicom-team/minicom) can be used.
+
+Minicom is especially useful for it's file transfer support, which may be used in the [filesystem demo](#08_filesystemspin2).
+
+Some examples also use P2 debug statements to log out statuses or errors.
+
 ### [01_modem_info.spin2](01_modem_info.spin2)
 
 Initializes modem, and outputs useful information (firmware rev, model number, manufacturer, serial number, baud rates) to the debug console.
@@ -152,10 +160,11 @@ Hologram supports data and SMS, but voice calling is blocked.
 * [x] MQTT
 * [ ] MQTTS
 * [x] Hardware Flow Control
+* [x] Certificate Manager
 * [ ] SSL
 * [ ] SIM Locking
 * [ ] SIM Toolkit
-* [*] Modem Filesystem
+* [x] Modem Filesystem
 * [ ] Modem GPIO
 * [ ] SMS
 * [ ] Voice Calls

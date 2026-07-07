@@ -47,6 +47,18 @@ CON
     RESULT_FILE_CREATE_ERROR,                           ...
     RESULT_READ_FILE_ERROR,                             ...
     RESULT_WRITE_FILE_ERROR
+    
+    ' ssl
+    #0, SSL_3_0, TLS_1_0, TLS_1_1, TLS_1_2, SSLTLS_ALL
+
+    ' auth
+    #0, AUTHMODE_NONE, AUTHMODE_SERVER, AUTHMODE_SERVER_CLIENT_mTLS, AUTHMODE_CLIENT
+
+    ' cert expiry
+    #0, CHECK_CERT_EXPIRY, IGNORE_CERT_EXPIRY
+
+    ' SNI
+    #0, SNI_OFF, SNI_ON
 
     #0, URC_NONE, URC_MQTT_RX_PAYLOADSTART, URC_MQTT_RX_PAYLOAD
 
@@ -151,6 +163,12 @@ VAR
     LONG    fsLsDirsMax                                             ' max bytes remaining for directories
     BYTE    fsLsOverflow                                            ' overflow flag
 
+    ' SSL List Certs streaming globals
+    BYTE sslListing
+    LONG sslListPtr
+    LONG sslListCertsMax
+    BYTE sslListOverflow
+
 PUB null()
 ' this is not a top-level object
 
@@ -177,42 +195,12 @@ PUB start(rxPin, txPin, rtsPin, ctsPin, dtrPin, rstPin, baud, doReset, serialMod
 
     fifoRx.ringBufferInit(pRxBuffer, rxBufferSize)
     fifoUrc.ringBufferInit(pUrcBuffer, urcBufferSize)
-    mqttPayloadLen := 0
-    mqttPayloadExpected := 0
-    mqttClientNum := 0
-    inMqttPayload := 0
-    mqttPayloadReady := 0
-    bytefill(@mqttPayloadBuffer, 0, MAX_RESPONSE)
 
     payloadMosi_init(PAYLOAD_MOSI_BUF_SIZE)
     payloadMiso_init(PAYLOAD_MISO_BUF_SIZE)
-    inWaitingPayloadLen := 0
-    payloadSent := 0
-    streamPhase := STREAM_PHASE_IDLE
-    streamChunkReceived := 0
-    streamChunkTotal := 0
-    lastLineEndWasCr := 0
-    streamFileArriving := 0
-    streamTransferComplete := 0
 
-    mqttTopicLen := 0
-    mqttTopicExpected := 0
-    inMqttTopic := 0
-    bytefill(@mqttTopicBuffer, 0, MAX_LINE_LENGTH)
-
-    inWaitingPayloadLen := 0
-    inWaitingForPrompt := false
-    mqttConnectResult := $FF
-
+    mqttConnectResult := 255
     mqttStartResult := 255
-
-    ' Initialize FSLS streaming globals
-    fsLsState := 0
-    fsLsFilesPtr := 0
-    fsLsDirsPtr := 0
-    fsLsFilesMax := 0
-    fsLsDirsMax := 0
-    fsLsOverflow := 0
 
 
 PUB stop()
@@ -697,6 +685,23 @@ PRI modemCog() | inChar, addr, len, clientNumFromUrc
                             fsLsFilesMax -= len + 1
                         else
                             fsLsOverflow := 1
+                next
+
+            ' CCERTLIST is waiting on data
+            if sslListing == 1
+                if str.startswith(@buf, @"+CCERTLIST: ")
+                    len := strsize(@buf+13)-1
+                    if len + 2 <= sslListCertsMax
+                        bytemove(sslListPtr, @buf+13, len)
+                        BYTE[sslListPtr + len] := 255
+                        sslListPtr += len + 1
+                        sslListCertsMax -= len + 1
+                    else
+                        sslListOverflow := 1
+                elseif str.startswith(@buf, @"OK")
+                    sslListing := 0
+                    inWaitingCompleted := true
+                    BYTE[sslListPtr + strsize(sslListPtr)-1] := 0
                 next
 
             ' urcs
@@ -1429,3 +1434,35 @@ PUB fsMem(pMemoryInfo) : r | tmp[64], addr
     addr++
 
     memory[pMemoryInfo].used := str.atoi(addr)
+
+PUB sslStartSendingCert(pFilename, length) : r | tmp[128]
+
+    payloadMosi_flush()
+    inWaitingPayloadLen := length
+    payloadSent := 0
+    inWaitingForPrompt := true
+
+    str.sprintf4(@tmp, @"AT+CCERTDOWN=%c%s%c,%d\000", 34, pFilename, 34, length)
+    runBlindCommandForPrompt(@tmp)
+
+    r := RESULT_OK
+
+PUB sslDeleteCert(filename) : r | tmp[128]
+    str.sprintf3(@tmp, @"AT+CCERTDELE=%c%s%c\000", 34, filename, 34)
+    r := runCommand(@tmp)
+
+PUB sslListCerts(p_certs, maxCertsBytes) : r
+    sslListing := 1
+    sslListPtr := p_certs
+    sslListCertsMax := maxCertsBytes
+    sslListOverflow := 0
+
+    sendCommand(@"AT+CCERTLIST")
+    repeat while isCommandRunning()
+    repeat while sslListing
+
+    if sslListOverflow
+        return -1
+
+    r := getCommandResult()
+    return r

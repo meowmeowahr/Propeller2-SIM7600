@@ -15,8 +15,8 @@
     }
   },
   "spin2.fDirSource": "/home/kevin/Projects/Propeller2-SIM7600",
-  "spin2.fNameTopLevel": "08_filesystem.spin2",
-  "spin2.optionsBinaryFname": "08_filesystem.binary",
+  "spin2.fNameTopLevel": "09_ssl_manager.spin2",
+  "spin2.optionsBinaryFname": "09_ssl_manager.binary",
   "spin2.fSpecCompiler": "/home/kevin/tools/flexprop/bin/flexspin",
   "spin2.fSpecLoader": "/home/kevin/tools/flexprop/bin/loadp2",
   "spinExtension.toolchain.optionsCompile.enableDebug": true,
@@ -88,7 +88,7 @@
     "-FIFO",
     "8192",
     "-FLASH",
-    "-pP7d5n9i1"
+    "-p/dev/ttyUSB0"
   ],
   "spin2.optionsBuild": [
     "-2",
@@ -114,8 +114,11 @@
   "cSpell.words": [
     "abspath",
     "atoi",
+    "AUTHMODE",
     "BKSP",
     "bytemove",
+    "CCERTDOWN",
+    "CCERTLIST",
     "CFTRANRX",
     "CFTRANTX",
     "CGDCONT",
@@ -146,6 +149,7 @@
     "FSCD",
     "FSDEL",
     "FSLS",
+    "FSMEM",
     "FSMKDIR",
     "FSRENAME",
     "FSRMDIR",
@@ -181,6 +185,7 @@
     "sdec",
     "SIMCOM",
     "sprintf",
+    "SSLTLS",
     "startswith",
     "strcomp",
     "strcopy",
@@ -198,5 +203,5 @@
     "zstr"
   ],
   "spin2.fSpecFlashBinary": "/home/kevin/tools/flexprop/board/P2ES_flashloader.bin",
-  "spin2.serialPort": "P7d5n9i1"
+  "spin2.serialPort": "/dev/ttyUSB0"
 }
