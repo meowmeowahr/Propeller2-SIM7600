@@ -290,7 +290,7 @@ PUB getInWaitingMqttPayload(pDst, maxLen) : r | lenToCopy
 
 
 PUB isReady() : ready
-    ready := modemIsReady && smsIsReady && simIsReady
+    ready := modemIsReady
 
 
 PUB modemReady() : ready
