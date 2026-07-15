@@ -45,7 +45,7 @@ CON
     }}
 
     OLD_BAUD  = 115200                                              ' old baud rate, default for SIM7600 is 115200
-    NEW_BAUD  = 921600                                              ' new baud rate to apply to non-volatile storage
+    NEW_BAUD  = 3_686_400                                              ' new baud rate to apply to non-volatile storage
 
 VAR
 

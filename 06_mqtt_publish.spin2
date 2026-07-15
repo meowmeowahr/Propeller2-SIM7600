@@ -38,7 +38,7 @@ DAT { network settings }
 
 CON
 
-    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_BAUD       = 3_686_400                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
     MODEM_RESET      = 0                                            ' Reset modem on startup, 0 = no reset, 1 = reset
     SERIAL_MODE      = %11000                                        
 '' -- mode.... %0xx1 = invert rx

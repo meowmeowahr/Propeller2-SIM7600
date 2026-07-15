@@ -27,7 +27,7 @@ CON { app io pins }
 
 CON
 
-    MODEM_BAUD       = 115_200                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
+    MODEM_BAUD       = 3_686_400                                      ' Modem baud rate, all modules are factory set to 115200, use `02_baud_rate_persist.spin2` to change the rate persistently
     MODEM_RESET      = 0                                            ' Reset modem on startup, 0 = no reset, 1 = reset
     SERIAL_MODE      = %11000                                        
 '' -- mode.... %0xx1 = invert rx
@@ -70,8 +70,9 @@ PUB main() | status, buf[128], bauds[24] ' up to 24 bauds, the SIM7600 only need
     status := modem.getModemManufacturer(@buf, 128)
     debug("getModemManufacturer ", sdec(status), zstr(@buf))
 
-    status := modem.getModemSerialNumber(@buf, 128)
-    debug("getModemSerialNumber ", sdec(status), zstr(@buf))
+    ' commented out for demo, returns IMEI
+    ' status := modem.getModemSerialNumber(@buf, 128)
+    ' debug("getModemSerialNumber ", sdec(status), zstr(@buf))
 
     status := modem.getSupportedBaudRates(@bauds, 24)
     if status <> -1                                     ' no error getting bauds count
