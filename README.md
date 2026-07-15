@@ -24,6 +24,20 @@ The driver may be compatible with the SIM7500 modem, but hasn't been tested with
 > [!WARNING]
 > The SIM7600 can cause large transient current spikes (>2A) when transmitting data. Use a stable supply for stability. The Waveshare module includes a MIC29302 LDO configured for 3.88V.
 
+## Antennas
+
+### GPS
+
+The SIM7600 module from Waveshare supports active GNSS antennas with a U.FL connector.
+
+I used the [TE 2108912-1](https://www.te.com/en/product-2108912-1.html) for testing.
+
+### MAIN/AUX
+
+The module ships with a MAIN LTE antenna. The AUX antenna for improved LTE reception uses a U.FL connector.
+
+I used the [TE 2367286-2](https://www.te.com/en/product-2367286-2.html) for testing.
+
 ## Examples
 
 ### Pinout
