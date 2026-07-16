@@ -53,7 +53,8 @@ All examples use the following pinout:
 | CTS   | 4  |
 | RTS   | 5  |
 
-All examples use 115200 baud for the modem with 4KB RX and URC buffers.
+All examples use 3,686,400 baud for the modem with 4KB RX and URC buffers.
+Use [example 02](#02_baud_rate_persistspin2) to change the baud rate from the default 115,200.
 
 > [!NOTE]
 > Level shifting is not required on the Waveshare board, as the module operates at 3.3v logic levels. Ensure that `Vio` is not connected, if using the Waveshare board
